@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Canvas Demo</title>
+    <style>
+        body {
+            margin: 0;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        canvas {
+            border: 2px solid #33ff00;
+            box-shadow: 0 0 20px #33ff00;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="demo" width="400" height="400"></canvas>
+
+    <script>
+        const canvas = document.getElementById('demo');
+        const ctx = canvas.getContext('2d');
+
+        // Clear background
+        ctx.fillStyle = '#050a05';
+        ctx.fillRect(0, 0, 400, 400);
+
+        // Draw a glowing green circle
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = '#33ff00';
+        ctx.strokeStyle = '#33ff00';
+        ctx.lineWidth = 3;
+
+        ctx.beginPath();
+        ctx.arc(200, 200, 100, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Animate it pulsing
+        let scale = 1;
+        let growing = true;
+
+        function animate() {
+            ctx.fillStyle = '#050a05';
+            ctx.fillRect(0, 0, 400, 400);
+
+            ctx.save();
+            ctx.translate(200, 200);
+            ctx.scale(scale, scale);
+            ctx.translate(-200, -200);
+
+            ctx.shadowBlur = 20 * scale;
+            ctx.shadowColor = '#33ff00';
+            ctx.strokeStyle = '#33ff00';
+            ctx.lineWidth = 3;
+
+            ctx.beginPath();
+            ctx.arc(200, 200, 100, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.restore();
+
+            // Update scale
+            if (growing) {
+                scale += 0.01;
+                if (scale >= 1.2) growing = false;
+            } else {
+                scale -= 0.01;
+                if (scale <= 0.8) growing = true;
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        animate();
+    </script>
+</body>
+</html>

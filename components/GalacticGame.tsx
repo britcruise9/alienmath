@@ -14,6 +14,7 @@ const C_ALERT = "#ff3300";
 const MODE_BOOT = 0;
 const MODE_HUB = 1;
 const MODE_GAME_LEVER = 2;
+const MODE_GAME_BLOB = 3;
 
 interface Node {
   id: number;
@@ -32,6 +33,18 @@ interface Block {
   w: number;
   c: string;
   fixed: boolean;
+}
+
+interface Blob {
+  id: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  value: number;
+  radius: number;
+  isDragging: boolean;
+  isPrime: boolean;
 }
 
 interface LeverLevel {
@@ -58,8 +71,8 @@ export default function GalacticGame() {
     mouse: {x: 0, y: 0, down: false},
     nodes: [
       { id: 1, x: 140, y: 225, r: 25, label: "STRUCTURE", complete: false, blink: 0 },
-      { id: 2, x: 220, y: 225, r: 25, label: "SPACE", complete: false, blink: 0 },
-      { id: 3, x: 300, y: 225, r: 25, label: "QUANTITY", complete: false, blink: 0 },
+      { id: 2, x: 220, y: 225, r: 25, label: "QUANTITY", complete: false, blink: 0 },
+      { id: 3, x: 300, y: 225, r: 25, label: "SPACE", complete: false, blink: 0 },
       { id: 4, x: 380, y: 225, r: 25, label: "CHANGE", complete: false, blink: 0 },
       { id: 5, x: 460, y: 225, r: 25, label: "UNCERTAINTY", complete: false, blink: 0 }
     ] as Node[],
@@ -71,6 +84,13 @@ export default function GalacticGame() {
       ang: 0,
       tgtAng: 0,
       winT: 0
+    },
+    blob: {
+      blobs: [] as Blob[],
+      draggedBlob: null as Blob | null,
+      dragStartX: 0,
+      dragStartY: 0,
+      nextId: 0
     }
   });
 
@@ -121,10 +141,12 @@ export default function GalacticGame() {
     function handleInputDown() {
       if (appState.mode === MODE_HUB) handleHubClick();
       else if (appState.mode === MODE_GAME_LEVER) handleLeverDown();
+      else if (appState.mode === MODE_GAME_BLOB) handleBlobDown();
     }
 
     function handleInputUp() {
       if (appState.mode === MODE_GAME_LEVER) handleLeverUp();
+      else if (appState.mode === MODE_GAME_BLOB) handleBlobUp();
     }
 
     function handleHubClick() {
@@ -136,6 +158,8 @@ export default function GalacticGame() {
             n.blink = 20;
           } else if (i === 0) {
             startLeverGame();
+          } else if (i === 1) {
+            startBlobGame();
           } else {
             n.blink = 20;
           }
@@ -263,6 +287,158 @@ export default function GalacticGame() {
         } else {
           appState.lever.bal = false;
           appState.lever.tgtAng = L > R ? -20 : 20;
+        }
+      }
+    }
+
+    // Blob Game Functions
+    function startBlobGame() {
+      appState.mode = MODE_GAME_BLOB;
+      appState.blob.blobs = [createBlob(300, 150, 6)];
+      setLevelIndicator("SPLIT THE BLOB");
+    }
+
+    function createBlob(x: number, y: number, value: number): Blob {
+      const isPrime = checkPrime(value);
+      return {
+        id: appState.blob.nextId++,
+        x,
+        y,
+        vx: 0,
+        vy: 0,
+        value,
+        radius: 20 + value * 3,
+        isDragging: false,
+        isPrime
+      };
+    }
+
+    function checkPrime(n: number): boolean {
+      if (n < 2) return false;
+      if (n === 2) return true;
+      if (n % 2 === 0) return false;
+      for (let i = 3; i <= Math.sqrt(n); i += 2) {
+        if (n % i === 0) return false;
+      }
+      return true;
+    }
+
+    function handleBlobDown() {
+      const m = appState.mouse;
+      for (let i = appState.blob.blobs.length - 1; i >= 0; i--) {
+        const blob = appState.blob.blobs[i];
+        const dx = m.x - blob.x;
+        const dy = m.y - blob.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < blob.radius) {
+          appState.blob.draggedBlob = blob;
+          appState.blob.dragStartX = blob.x;
+          appState.blob.dragStartY = blob.y;
+          blob.isDragging = true;
+          break;
+        }
+      }
+    }
+
+    function handleBlobUp() {
+      if (appState.blob.draggedBlob) {
+        const blob = appState.blob.draggedBlob;
+        const dx = blob.x - appState.blob.dragStartX;
+        const dy = blob.y - appState.blob.dragStartY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance > 50 && blob.value > 1) {
+          trySplit(blob);
+        }
+
+        blob.isDragging = false;
+        appState.blob.draggedBlob = null;
+      }
+    }
+
+    function trySplit(blob: Blob) {
+      if (blob.isPrime) {
+        setLevelIndicator("⚠ CANNOT SPLIT - PRIME RESISTANCE");
+        blob.vx = (Math.random() - 0.5) * 10;
+        blob.vy = (Math.random() - 0.5) * 10;
+        return;
+      }
+
+      if (blob.value >= 2) {
+        const half = Math.floor(blob.value / 2);
+        const remainder = blob.value - half;
+
+        appState.blob.blobs = appState.blob.blobs.filter(b => b.id !== blob.id);
+
+        const blob1 = createBlob(blob.x - 30, blob.y, half);
+        const blob2 = createBlob(blob.x + 30, blob.y, remainder);
+
+        blob1.vx = -3;
+        blob2.vx = 3;
+
+        appState.blob.blobs.push(blob1, blob2);
+        setLevelIndicator(`Split ${blob.value} → ${half} + ${remainder}`);
+      }
+    }
+
+    function updateBlobPhysics() {
+      appState.blob.blobs.forEach(blob => {
+        if (!blob.isDragging) {
+          blob.x += blob.vx;
+          blob.y += blob.vy;
+
+          blob.vx *= 0.95;
+          blob.vy *= 0.95;
+
+          blob.vy += 0.2;
+
+          if (blob.x - blob.radius < 0) {
+            blob.x = blob.radius;
+            blob.vx *= -0.5;
+          }
+          if (blob.x + blob.radius > 600) {
+            blob.x = 600 - blob.radius;
+            blob.vx *= -0.5;
+          }
+          if (blob.y - blob.radius < 0) {
+            blob.y = blob.radius;
+            blob.vy *= -0.5;
+          }
+          if (blob.y + blob.radius > 450) {
+            blob.y = 450 - blob.radius;
+            blob.vy *= -0.5;
+          }
+        }
+      });
+
+      if (appState.blob.draggedBlob) {
+        appState.blob.draggedBlob.x = appState.mouse.x;
+        appState.blob.draggedBlob.y = appState.mouse.y;
+      }
+
+      for (let i = 0; i < appState.blob.blobs.length; i++) {
+        for (let j = i + 1; j < appState.blob.blobs.length; j++) {
+          const b1 = appState.blob.blobs[i];
+          const b2 = appState.blob.blobs[j];
+          const dx = b2.x - b1.x;
+          const dy = b2.y - b1.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const minDist = b1.radius + b2.radius;
+
+          if (dist < minDist && dist > 0) {
+            const force = (minDist - dist) * 0.5;
+            const angle = Math.atan2(dy, dx);
+
+            if (!b1.isDragging) {
+              b1.vx -= Math.cos(angle) * force * 0.1;
+              b1.vy -= Math.sin(angle) * force * 0.1;
+            }
+            if (!b2.isDragging) {
+              b2.vx += Math.cos(angle) * force * 0.1;
+              b2.vy += Math.sin(angle) * force * 0.1;
+            }
+          }
         }
       }
     }
@@ -455,6 +631,51 @@ export default function GalacticGame() {
       ctx.shadowBlur = 0;
     }
 
+    function drawBlobGame() {
+      updateBlobPhysics();
+
+      appState.blob.blobs.forEach(blob => {
+        const color = blob.isPrime ? C_MASTERY : C_SIGNAL;
+
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = color;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(blob.x, blob.y, blob.radius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.2;
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = color;
+        ctx.font = "20px 'Share Tech Mono', monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(blob.value.toString(), blob.x, blob.y);
+
+        if (blob.isPrime) {
+          ctx.strokeStyle = C_MASTERY;
+          ctx.lineWidth = 1;
+          for (let i = 0; i < 8; i++) {
+            const angle = (i / 8) * Math.PI * 2;
+            const x1 = blob.x + Math.cos(angle) * blob.radius;
+            const y1 = blob.y + Math.sin(angle) * blob.radius;
+            const x2 = blob.x + Math.cos(angle) * (blob.radius + 5);
+            const y2 = blob.y + Math.sin(angle) * (blob.radius + 5);
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+          }
+        }
+      });
+      ctx.shadowBlur = 0;
+    }
+
     // Main draw loop
     function draw() {
       appState.frame++;
@@ -468,6 +689,8 @@ export default function GalacticGame() {
         drawHub();
       } else if (appState.mode === MODE_GAME_LEVER) {
         drawLeverGame();
+      } else if (appState.mode === MODE_GAME_BLOB) {
+        drawBlobGame();
       }
 
       requestAnimationFrame(draw);

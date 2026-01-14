@@ -1,5 +1,5 @@
-import GameHub from '@/components/GameHub'
+import GalacticGame from '@/components/GalacticGame'
 
 export default function Home() {
-  return <GameHub />
+  return <GalacticGame />
 }
