@@ -106,6 +106,13 @@ export default function GalacticGame() {
       particles: [] as {x: number, y: number, vx: number, vy: number, age: number}[],
       bins: [] as number[], // histogram bins
       spawning: false
+    },
+    space: {
+      shapes: [] as {id: number, cells: {x: number, y: number}[], x: number, y: number, rotation: number, placed: boolean}[],
+      dragging: null as {id: number, cells: {x: number, y: number}[], x: number, y: number, rotation: number, placed: boolean} | null,
+      target: [] as {x: number, y: number}[],
+      gridSize: 40,
+      complete: false
     }
   });
 
@@ -156,7 +163,8 @@ export default function GalacticGame() {
     function handleInputDown() {
       // Check for back button in game modes
       if (appState.mode === MODE_GAME_LEVER || appState.mode === MODE_GAME_BLOB ||
-          appState.mode === MODE_GAME_CHANGE || appState.mode === MODE_GAME_UNCERTAIN) {
+          appState.mode === MODE_GAME_CHANGE || appState.mode === MODE_GAME_UNCERTAIN ||
+          appState.mode === MODE_GAME_SPACE) {
         const m = appState.mouse;
         if (m.x < 80 && m.y < 40) {
           returnToHub();
@@ -169,6 +177,7 @@ export default function GalacticGame() {
       else if (appState.mode === MODE_GAME_BLOB) handleBlobDown();
       else if (appState.mode === MODE_GAME_CHANGE) handleChangeClick();
       else if (appState.mode === MODE_GAME_UNCERTAIN) handleUncertainClick();
+      else if (appState.mode === MODE_GAME_SPACE) handleSpaceDown();
     }
 
     function returnToHub() {
@@ -179,6 +188,7 @@ export default function GalacticGame() {
     function handleInputUp() {
       if (appState.mode === MODE_GAME_LEVER) handleLeverUp();
       else if (appState.mode === MODE_GAME_BLOB) handleBlobUp();
+      else if (appState.mode === MODE_GAME_SPACE) handleSpaceUp();
     }
 
     function handleHubClick() {
@@ -192,6 +202,8 @@ export default function GalacticGame() {
             startLeverGame();
           } else if (i === 1) {
             startBlobGame();
+          } else if (i === 2) {
+            startSpaceGame();
           } else if (i === 3) {
             startChangeGame();
           } else if (i === 4) {
@@ -607,6 +619,102 @@ export default function GalacticGame() {
 
       // Remove old particles
       appState.uncertain.particles = appState.uncertain.particles.filter(p => p.age < 300);
+    }
+
+    // Space Game Functions
+    function startSpaceGame() {
+      appState.mode = MODE_GAME_SPACE;
+      appState.space.complete = false;
+      appState.space.dragging = null;
+
+      // Define target pattern (simple L shape for now)
+      appState.space.target = [
+        {x: 6, y: 4}, {x: 6, y: 5}, {x: 6, y: 6}, {x: 7, y: 6}, {x: 8, y: 6}
+      ];
+
+      // Define pieces
+      appState.space.shapes = [
+        {
+          id: 1,
+          cells: [{x: 0, y: 0}, {x: 0, y: 1}, {x: 0, y: 2}], // I-piece (3 cells)
+          x: 100,
+          y: 100,
+          rotation: 0,
+          placed: false
+        },
+        {
+          id: 2,
+          cells: [{x: 0, y: 0}, {x: 1, y: 0}], // 2-cell piece
+          x: 200,
+          y: 100,
+          rotation: 0,
+          placed: false
+        }
+      ];
+
+      setLevelIndicator("DRAG SHAPES - CLICK TO ROTATE");
+    }
+
+    function handleSpaceDown() {
+      const m = appState.mouse;
+      const g = appState.space.gridSize;
+
+      // Check if clicking on a shape
+      for (const shape of appState.space.shapes) {
+        if (!shape.placed) {
+          for (const cell of shape.cells) {
+            const rx = cell.x * g + shape.x;
+            const ry = cell.y * g + shape.y;
+            if (Math.abs(m.x - rx) < g/2 && Math.abs(m.y - ry) < g/2) {
+              if (m.x > shape.x + g) {
+                // Right click to rotate
+                shape.rotation = (shape.rotation + 90) % 360;
+              } else {
+                // Left click to drag
+                appState.space.dragging = shape;
+              }
+              return;
+            }
+          }
+        }
+      }
+    }
+
+    function handleSpaceUp() {
+      if (appState.space.dragging) {
+        checkSpaceMatch();
+        appState.space.dragging = null;
+      }
+    }
+
+    function checkSpaceMatch() {
+      // Check if all shapes match the target
+      const g = appState.space.gridSize;
+      const placed: {x: number, y: number}[] = [];
+
+      appState.space.shapes.forEach(shape => {
+        shape.cells.forEach(cell => {
+          const rot = shape.rotation * Math.PI / 180;
+          const rx = Math.round(cell.x * Math.cos(rot) - cell.y * Math.sin(rot));
+          const ry = Math.round(cell.x * Math.sin(rot) + cell.y * Math.cos(rot));
+          const gx = Math.round((shape.x + rx * g) / g);
+          const gy = Math.round((shape.y + ry * g) / g);
+          placed.push({x: gx, y: gy});
+        });
+      });
+
+      // Check if placed cells match target
+      if (placed.length === appState.space.target.length) {
+        const allMatch = appState.space.target.every(t =>
+          placed.some(p => p.x === t.x && p.y === t.y)
+        );
+        if (allMatch) {
+          appState.space.complete = true;
+          setLevelIndicator("✓ COMPLETE");
+        } else {
+          setLevelIndicator("TRY AGAIN");
+        }
+      }
     }
 
     // Drawing functions
@@ -1117,6 +1225,55 @@ export default function GalacticGame() {
       drawBackButton();
     }
 
+    function drawSpaceGame() {
+      const g = appState.space.gridSize;
+
+      // Update dragging position
+      if (appState.space.dragging) {
+        appState.space.dragging.x = appState.mouse.x;
+        appState.space.dragging.y = appState.mouse.y;
+      }
+
+      // Draw target pattern
+      const brightness = appState.space.complete ? 1.0 : 0.3;
+      ctx.strokeStyle = C_SIGNAL;
+      ctx.fillStyle = C_SIGNAL;
+      ctx.globalAlpha = brightness;
+
+      appState.space.target.forEach(cell => {
+        const x = cell.x * g;
+        const y = cell.y * g;
+        ctx.strokeRect(x, y, g, g);
+        if (appState.space.complete) {
+          ctx.fillRect(x, y, g, g);
+        }
+      });
+      ctx.globalAlpha = 1.0;
+
+      // Draw shapes
+      appState.space.shapes.forEach(shape => {
+        const isDragging = shape === appState.space.dragging;
+        ctx.strokeStyle = isDragging ? C_MASTERY : C_SIGNAL;
+        ctx.fillStyle = isDragging ? C_MASTERY : C_SIGNAL;
+        ctx.lineWidth = 2;
+
+        shape.cells.forEach(cell => {
+          const rot = shape.rotation * Math.PI / 180;
+          const rx = cell.x * Math.cos(rot) - cell.y * Math.sin(rot);
+          const ry = cell.x * Math.sin(rot) + cell.y * Math.cos(rot);
+          const x = shape.x + rx * g;
+          const y = shape.y + ry * g;
+
+          ctx.strokeRect(x - g/2, y - g/2, g, g);
+          ctx.globalAlpha = 0.3;
+          ctx.fillRect(x - g/2, y - g/2, g, g);
+          ctx.globalAlpha = 1.0;
+        });
+      });
+
+      drawBackButton();
+    }
+
     // Main draw loop
     function draw() {
       appState.frame++;
@@ -1132,6 +1289,8 @@ export default function GalacticGame() {
         drawLeverGame();
       } else if (appState.mode === MODE_GAME_BLOB) {
         drawBlobGame();
+      } else if (appState.mode === MODE_GAME_SPACE) {
+        drawSpaceGame();
       } else if (appState.mode === MODE_GAME_CHANGE) {
         drawChangeGame();
       } else if (appState.mode === MODE_GAME_UNCERTAIN) {
