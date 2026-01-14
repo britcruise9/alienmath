@@ -1,5 +1,5 @@
-import GalacticGame from '@/components/GalacticGame'
+import BlobGame from '@/components/BlobGame'
 
 export default function Home() {
-  return <GalacticGame />
+  return <BlobGame />
 }
