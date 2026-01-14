@@ -15,6 +15,9 @@ const MODE_BOOT = 0;
 const MODE_HUB = 1;
 const MODE_GAME_LEVER = 2;
 const MODE_GAME_BLOB = 3;
+const MODE_GAME_SPACE = 4;
+const MODE_GAME_CHANGE = 5;
+const MODE_GAME_UNCERTAIN = 6;
 
 interface Node {
   id: number;
@@ -91,6 +94,13 @@ export default function GalacticGame() {
       dragStartX: 0,
       dragStartY: 0,
       nextId: 0
+    },
+    change: {
+      waterLevel: 1.0,
+      draining: false,
+      selectedShape: 0, // 0=cylinder, 1=cone_up, 2=cone_down, 3=funnel
+      history: [] as {time: number, level: number}[],
+      time: 0
     }
   });
 
@@ -140,7 +150,8 @@ export default function GalacticGame() {
     // Game logic functions
     function handleInputDown() {
       // Check for back button in game modes
-      if (appState.mode === MODE_GAME_LEVER || appState.mode === MODE_GAME_BLOB) {
+      if (appState.mode === MODE_GAME_LEVER || appState.mode === MODE_GAME_BLOB ||
+          appState.mode === MODE_GAME_CHANGE) {
         const m = appState.mouse;
         if (m.x < 80 && m.y < 40) {
           returnToHub();
@@ -151,6 +162,7 @@ export default function GalacticGame() {
       if (appState.mode === MODE_HUB) handleHubClick();
       else if (appState.mode === MODE_GAME_LEVER) handleLeverDown();
       else if (appState.mode === MODE_GAME_BLOB) handleBlobDown();
+      else if (appState.mode === MODE_GAME_CHANGE) handleChangeClick();
     }
 
     function returnToHub() {
@@ -174,6 +186,8 @@ export default function GalacticGame() {
             startLeverGame();
           } else if (i === 1) {
             startBlobGame();
+          } else if (i === 3) {
+            startChangeGame();
           } else {
             n.blink = 20;
           }
@@ -441,6 +455,92 @@ export default function GalacticGame() {
             b2.vy += Math.sin(angle) * force * 0.1;
           }
         }
+      }
+    }
+
+    // Change Game Functions
+    function startChangeGame() {
+      appState.mode = MODE_GAME_CHANGE;
+      appState.change.waterLevel = 1.0;
+      appState.change.draining = false;
+      appState.change.selectedShape = 0;
+      appState.change.history = [];
+      appState.change.time = 0;
+      setLevelIndicator("CLICK SHAPES TO SELECT, CLICK START");
+    }
+
+    function handleChangeClick() {
+      const m = appState.mouse;
+      // Check if clicking on shape selectors (top row)
+      const shapes = ['CYL', 'CONE↑', 'CONE↓', 'FUNNEL'];
+      for (let i = 0; i < shapes.length; i++) {
+        const sx = 80 + i * 120;
+        const sy = 50;
+        if (Math.abs(m.x - sx) < 50 && Math.abs(m.y - sy) < 20) {
+          appState.change.selectedShape = i;
+          appState.change.waterLevel = 1.0;
+          appState.change.draining = false;
+          appState.change.history = [];
+          appState.change.time = 0;
+          setLevelIndicator("CLICK START TO DRAIN");
+          return;
+        }
+      }
+
+      // Check if clicking start/reset button
+      if (m.x > 230 && m.x < 370 && m.y > 390 && m.y < 430) {
+        if (!appState.change.draining) {
+          appState.change.draining = true;
+          appState.change.waterLevel = 1.0;
+          appState.change.history = [{time: 0, level: 1.0}];
+          appState.change.time = 0;
+          setLevelIndicator("DRAINING...");
+        } else {
+          appState.change.draining = false;
+          setLevelIndicator("PAUSED");
+        }
+      }
+    }
+
+    function updateChangeGame() {
+      if (!appState.change.draining || appState.change.waterLevel <= 0) {
+        if (appState.change.waterLevel <= 0 && appState.change.draining) {
+          appState.change.draining = false;
+          setLevelIndicator("EMPTY");
+        }
+        return;
+      }
+
+      appState.change.time += 1;
+
+      // Calculate drain rate based on shape
+      let drainRate = 0;
+      const h = appState.change.waterLevel; // height as fraction 0-1
+
+      switch (appState.change.selectedShape) {
+        case 0: // Cylinder - constant rate
+          drainRate = 0.002;
+          break;
+        case 1: // Cone pointing up - slower as it drains (wider at top)
+          drainRate = 0.002 * (1 - h) * (1 - h); // quadratic slowdown
+          break;
+        case 2: // Cone pointing down - faster as it drains (wider at bottom)
+          drainRate = 0.002 * h * h; // quadratic speedup
+          break;
+        case 3: // Funnel - starts slow, then fast
+          drainRate = h < 0.3 ? 0.004 : 0.001;
+          break;
+      }
+
+      appState.change.waterLevel -= drainRate;
+      if (appState.change.waterLevel < 0) appState.change.waterLevel = 0;
+
+      // Record history for graph
+      if (appState.change.time % 5 === 0) {
+        appState.change.history.push({
+          time: appState.change.time,
+          level: appState.change.waterLevel
+        });
       }
     }
 
@@ -714,6 +814,187 @@ export default function GalacticGame() {
       drawBackButton();
     }
 
+    function drawChangeGame() {
+      updateChangeGame();
+
+      const shapes = ['CYL', 'CONE↑', 'CONE↓', 'FUNNEL'];
+
+      // Draw shape selectors
+      shapes.forEach((name, i) => {
+        const sx = 80 + i * 120;
+        const sy = 50;
+        const isSelected = i === appState.change.selectedShape;
+
+        ctx.strokeStyle = isSelected ? C_SIGNAL : C_DIM;
+        ctx.fillStyle = isSelected ? C_SIGNAL : C_DIM;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(sx - 45, sy - 15, 90, 30);
+
+        if (isSelected) {
+          ctx.globalAlpha = 0.3;
+          ctx.fillRect(sx - 45, sy - 15, 90, 30);
+          ctx.globalAlpha = 1.0;
+        }
+
+        ctx.font = "12px monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(name, sx, sy);
+      });
+
+      // Draw container with water
+      const cx = 180;
+      const cy = 300;
+      const width = 80;
+      const height = 200;
+      const waterHeight = appState.change.waterLevel * height;
+
+      ctx.strokeStyle = C_SIGNAL;
+      ctx.lineWidth = 2;
+
+      // Draw container shape
+      ctx.beginPath();
+      switch (appState.change.selectedShape) {
+        case 0: // Cylinder
+          ctx.moveTo(cx - width/2, cy - height/2);
+          ctx.lineTo(cx - width/2, cy + height/2);
+          ctx.moveTo(cx + width/2, cy - height/2);
+          ctx.lineTo(cx + width/2, cy + height/2);
+          break;
+        case 1: // Cone up
+          ctx.moveTo(cx - width/2, cy - height/2);
+          ctx.lineTo(cx, cy + height/2);
+          ctx.lineTo(cx + width/2, cy - height/2);
+          break;
+        case 2: // Cone down
+          ctx.moveTo(cx, cy - height/2);
+          ctx.lineTo(cx - width/2, cy + height/2);
+          ctx.lineTo(cx + width/2, cy + height/2);
+          break;
+        case 3: // Funnel
+          ctx.moveTo(cx - width/2, cy - height/2);
+          ctx.lineTo(cx - 15, cy + height*0.6 - height/2);
+          ctx.lineTo(cx - 15, cy + height/2);
+          ctx.moveTo(cx + width/2, cy - height/2);
+          ctx.lineTo(cx + 15, cy + height*0.6 - height/2);
+          ctx.lineTo(cx + 15, cy + height/2);
+          break;
+      }
+      ctx.stroke();
+
+      // Draw water level
+      if (waterHeight > 0) {
+        const waterY = cy + height/2 - waterHeight;
+        ctx.fillStyle = C_MASTERY;
+        ctx.globalAlpha = 0.3;
+
+        ctx.beginPath();
+        switch (appState.change.selectedShape) {
+          case 0: // Cylinder
+            ctx.fillRect(cx - width/2, waterY, width, waterHeight);
+            break;
+          case 1: // Cone up
+            const topWidthConeUp = width * (1 - appState.change.waterLevel);
+            ctx.moveTo(cx - topWidthConeUp/2, waterY);
+            ctx.lineTo(cx - width/2, cy + height/2);
+            ctx.lineTo(cx + width/2, cy + height/2);
+            ctx.lineTo(cx + topWidthConeUp/2, waterY);
+            ctx.closePath();
+            ctx.fill();
+            break;
+          case 2: // Cone down
+            const botWidthConeDown = width * appState.change.waterLevel;
+            ctx.moveTo(cx - botWidthConeDown/2, cy + height/2);
+            ctx.lineTo(cx + botWidthConeDown/2, cy + height/2);
+            ctx.lineTo(cx, cy + height/2 - waterHeight);
+            ctx.closePath();
+            ctx.fill();
+            break;
+          case 3: // Funnel
+            if (appState.change.waterLevel > 0.6) {
+              const funnelWaterHeight = waterHeight;
+              const funnelWidth = width - (width - 30) * ((1 - appState.change.waterLevel) / 0.4);
+              ctx.fillRect(cx - funnelWidth/2, waterY, funnelWidth, funnelWaterHeight);
+            } else {
+              ctx.fillRect(cx - 15, waterY, 30, waterHeight);
+            }
+            break;
+        }
+        ctx.globalAlpha = 1.0;
+
+        // Water surface line
+        ctx.strokeStyle = C_MASTERY;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        switch (appState.change.selectedShape) {
+          case 0:
+            ctx.moveTo(cx - width/2, waterY);
+            ctx.lineTo(cx + width/2, waterY);
+            break;
+          case 1:
+            const topWidthUp = width * (1 - appState.change.waterLevel);
+            ctx.moveTo(cx - topWidthUp/2, waterY);
+            ctx.lineTo(cx + topWidthUp/2, waterY);
+            break;
+          case 2:
+            const botWidthDown = width * appState.change.waterLevel;
+            ctx.moveTo(cx - botWidthDown/2, waterY);
+            ctx.lineTo(cx + botWidthDown/2, waterY);
+            break;
+          case 3:
+            if (appState.change.waterLevel > 0.6) {
+              const funnelWidth = width - (width - 30) * ((1 - appState.change.waterLevel) / 0.4);
+              ctx.moveTo(cx - funnelWidth/2, waterY);
+              ctx.lineTo(cx + funnelWidth/2, waterY);
+            } else {
+              ctx.moveTo(cx - 15, waterY);
+              ctx.lineTo(cx + 15, waterY);
+            }
+            break;
+        }
+        ctx.stroke();
+      }
+
+      // Draw graph
+      const gx = 370;
+      const gy = 150;
+      const gw = 200;
+      const gh = 180;
+
+      ctx.strokeStyle = C_DIM;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(gx, gy, gw, gh);
+
+      // Draw history
+      if (appState.change.history.length > 1) {
+        ctx.strokeStyle = C_SIGNAL;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+
+        const maxTime = Math.max(500, appState.change.time);
+        appState.change.history.forEach((pt, i) => {
+          const x = gx + (pt.time / maxTime) * gw;
+          const y = gy + gh - (pt.level * gh);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      }
+
+      // Draw start/pause button
+      const btnText = appState.change.draining ? "PAUSE" : "START";
+      ctx.strokeStyle = C_SIGNAL;
+      ctx.fillStyle = C_SIGNAL;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(230, 390, 140, 40);
+      ctx.font = "16px monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(btnText, 300, 410);
+
+      drawBackButton();
+    }
+
     // Main draw loop
     function draw() {
       appState.frame++;
@@ -729,6 +1010,8 @@ export default function GalacticGame() {
         drawLeverGame();
       } else if (appState.mode === MODE_GAME_BLOB) {
         drawBlobGame();
+      } else if (appState.mode === MODE_GAME_CHANGE) {
+        drawChangeGame();
       }
 
       requestAnimationFrame(draw);
