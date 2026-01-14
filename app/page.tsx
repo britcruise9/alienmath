@@ -1,5 +1,5 @@
-import BlobGame from '@/components/BlobGame'
+import GameHub from '@/components/GameHub'
 
 export default function Home() {
-  return <BlobGame />
+  return <GameHub />
 }
