@@ -1,0 +1,50 @@
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --phosphor-primary: #33ff00;
+  --phosphor-dim: #1a6600;
+  --phosphor-alert: #ff3300;
+  --phosphor-amber: #ffcc00;
+  --phosphor-cyan: #00ffff;
+  --bg-color: #050a05;
+  --grid-color: #0f1f0f;
+}
+
+body {
+  margin: 0;
+  background: #000;
+  color: var(--phosphor-primary);
+  font-family: 'Share Tech Mono', monospace;
+  overflow: hidden;
+  user-select: none;
+}
+
+#game-container {
+  position: relative;
+  border: 2px solid var(--phosphor-dim);
+  box-shadow: 0 0 10px var(--phosphor-dim), inset 0 0 20px rgba(0, 0, 0, 0.8);
+  background: var(--bg-color);
+  cursor: crosshair;
+}
+
+#crt-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+    linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+  background-size: 100% 2px, 3px 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+
+canvas {
+  display: block;
+  filter: contrast(1.2) brightness(1.1);
+}
