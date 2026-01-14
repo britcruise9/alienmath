@@ -308,8 +308,9 @@ export default function GalacticGame() {
     // Blob Game Functions
     function startBlobGame() {
       appState.mode = MODE_GAME_BLOB;
-      appState.blob.blobs = [createBlob(300, 150, 6)];
-      setLevelIndicator("SPLIT THE BLOB");
+      const randomValue = Math.floor(Math.random() * 20) + 1;
+      appState.blob.blobs = [createBlob(300, 150, randomValue)];
+      setLevelIndicator("CLICK TO SPLIT");
     }
 
     function createBlob(x: number, y: number, value: number): Blob {
@@ -321,7 +322,7 @@ export default function GalacticGame() {
         vx: 0,
         vy: 0,
         value,
-        radius: 20 + value * 3,
+        radius: Math.max(20, 15 + value * 2.5),
         isDragging: false,
         isPrime
       };
@@ -346,34 +347,19 @@ export default function GalacticGame() {
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist < blob.radius) {
-          appState.blob.draggedBlob = blob;
-          appState.blob.dragStartX = blob.x;
-          appState.blob.dragStartY = blob.y;
-          blob.isDragging = true;
+          trySplit(blob);
           break;
         }
       }
     }
 
     function handleBlobUp() {
-      if (appState.blob.draggedBlob) {
-        const blob = appState.blob.draggedBlob;
-        const dx = blob.x - appState.blob.dragStartX;
-        const dy = blob.y - appState.blob.dragStartY;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-
-        if (distance > 50 && blob.value > 1) {
-          trySplit(blob);
-        }
-
-        blob.isDragging = false;
-        appState.blob.draggedBlob = null;
-      }
+      // Not used anymore - splitting happens on click
     }
 
     function trySplit(blob: Blob) {
       if (blob.isPrime) {
-        setLevelIndicator("⚠ CANNOT SPLIT - PRIME RESISTANCE");
+        setLevelIndicator("⚠ PRIME - CANNOT SPLIT");
         blob.vx = (Math.random() - 0.5) * 10;
         blob.vy = (Math.random() - 0.5) * 10;
         return;
@@ -392,44 +378,49 @@ export default function GalacticGame() {
         blob2.vx = 3;
 
         appState.blob.blobs.push(blob1, blob2);
-        setLevelIndicator(`Split ${blob.value} → ${half} + ${remainder}`);
+        setLevelIndicator("SPLIT");
+
+        // Check if all remaining blobs are prime
+        const allPrime = appState.blob.blobs.every(b => b.isPrime);
+        if (allPrime) {
+          setTimeout(() => {
+            const randomValue = Math.floor(Math.random() * 20) + 1;
+            const newBlob = createBlob(300, 50, randomValue);
+            newBlob.vy = 2;
+            appState.blob.blobs.push(newBlob);
+            setLevelIndicator("NEW COMPOSITE");
+          }, 1000);
+        }
       }
     }
 
     function updateBlobPhysics() {
       appState.blob.blobs.forEach(blob => {
-        if (!blob.isDragging) {
-          blob.x += blob.vx;
-          blob.y += blob.vy;
+        blob.x += blob.vx;
+        blob.y += blob.vy;
 
-          blob.vx *= 0.95;
-          blob.vy *= 0.95;
+        blob.vx *= 0.95;
+        blob.vy *= 0.95;
 
-          blob.vy += 0.2;
+        blob.vy += 0.2;
 
-          if (blob.x - blob.radius < 0) {
-            blob.x = blob.radius;
-            blob.vx *= -0.5;
-          }
-          if (blob.x + blob.radius > 600) {
-            blob.x = 600 - blob.radius;
-            blob.vx *= -0.5;
-          }
-          if (blob.y - blob.radius < 0) {
-            blob.y = blob.radius;
-            blob.vy *= -0.5;
-          }
-          if (blob.y + blob.radius > 450) {
-            blob.y = 450 - blob.radius;
-            blob.vy *= -0.5;
-          }
+        if (blob.x - blob.radius < 0) {
+          blob.x = blob.radius;
+          blob.vx *= -0.5;
+        }
+        if (blob.x + blob.radius > 600) {
+          blob.x = 600 - blob.radius;
+          blob.vx *= -0.5;
+        }
+        if (blob.y - blob.radius < 0) {
+          blob.y = blob.radius;
+          blob.vy *= -0.5;
+        }
+        if (blob.y + blob.radius > 450) {
+          blob.y = 450 - blob.radius;
+          blob.vy *= -0.5;
         }
       });
-
-      if (appState.blob.draggedBlob) {
-        appState.blob.draggedBlob.x = appState.mouse.x;
-        appState.blob.draggedBlob.y = appState.mouse.y;
-      }
 
       for (let i = 0; i < appState.blob.blobs.length; i++) {
         for (let j = i + 1; j < appState.blob.blobs.length; j++) {
@@ -444,14 +435,10 @@ export default function GalacticGame() {
             const force = (minDist - dist) * 0.5;
             const angle = Math.atan2(dy, dx);
 
-            if (!b1.isDragging) {
-              b1.vx -= Math.cos(angle) * force * 0.1;
-              b1.vy -= Math.sin(angle) * force * 0.1;
-            }
-            if (!b2.isDragging) {
-              b2.vx += Math.cos(angle) * force * 0.1;
-              b2.vy += Math.sin(angle) * force * 0.1;
-            }
+            b1.vx -= Math.cos(angle) * force * 0.1;
+            b1.vy -= Math.sin(angle) * force * 0.1;
+            b2.vx += Math.cos(angle) * force * 0.1;
+            b2.vy += Math.sin(angle) * force * 0.1;
           }
         }
       }
@@ -688,11 +675,23 @@ export default function GalacticGame() {
         ctx.globalAlpha = 1.0;
 
         ctx.shadowBlur = 0;
+
+        // Draw grid of squares instead of number
+        const squareSize = 4;
+        const gap = 1;
+        const sqPerRow = Math.ceil(Math.sqrt(blob.value));
+        const totalWidth = sqPerRow * (squareSize + gap) - gap;
+        const startX = blob.x - totalWidth / 2;
+        const startY = blob.y - totalWidth / 2;
+
         ctx.fillStyle = color;
-        ctx.font = "20px 'Share Tech Mono', monospace";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(blob.value.toString(), blob.x, blob.y);
+        for (let i = 0; i < blob.value; i++) {
+          const col = i % sqPerRow;
+          const row = Math.floor(i / sqPerRow);
+          const x = startX + col * (squareSize + gap);
+          const y = startY + row * (squareSize + gap);
+          ctx.fillRect(x, y, squareSize, squareSize);
+        }
 
         if (blob.isPrime) {
           ctx.strokeStyle = C_MASTERY;
