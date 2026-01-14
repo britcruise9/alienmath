@@ -101,6 +101,11 @@ export default function GalacticGame() {
       selectedShape: 0, // 0=cylinder, 1=cone_up, 2=cone_down, 3=funnel
       history: [] as {time: number, level: number}[],
       time: 0
+    },
+    uncertain: {
+      particles: [] as {x: number, y: number, vx: number, vy: number, age: number}[],
+      bins: [] as number[], // histogram bins
+      spawning: false
     }
   });
 
@@ -151,7 +156,7 @@ export default function GalacticGame() {
     function handleInputDown() {
       // Check for back button in game modes
       if (appState.mode === MODE_GAME_LEVER || appState.mode === MODE_GAME_BLOB ||
-          appState.mode === MODE_GAME_CHANGE) {
+          appState.mode === MODE_GAME_CHANGE || appState.mode === MODE_GAME_UNCERTAIN) {
         const m = appState.mouse;
         if (m.x < 80 && m.y < 40) {
           returnToHub();
@@ -163,6 +168,7 @@ export default function GalacticGame() {
       else if (appState.mode === MODE_GAME_LEVER) handleLeverDown();
       else if (appState.mode === MODE_GAME_BLOB) handleBlobDown();
       else if (appState.mode === MODE_GAME_CHANGE) handleChangeClick();
+      else if (appState.mode === MODE_GAME_UNCERTAIN) handleUncertainClick();
     }
 
     function returnToHub() {
@@ -188,6 +194,8 @@ export default function GalacticGame() {
             startBlobGame();
           } else if (i === 3) {
             startChangeGame();
+          } else if (i === 4) {
+            startUncertainGame();
           } else {
             n.blink = 20;
           }
@@ -542,6 +550,63 @@ export default function GalacticGame() {
           level: appState.change.waterLevel
         });
       }
+    }
+
+    // Uncertainty Game Functions
+    function startUncertainGame() {
+      appState.mode = MODE_GAME_UNCERTAIN;
+      appState.uncertain.particles = [];
+      appState.uncertain.bins = new Array(15).fill(0);
+      appState.uncertain.spawning = false;
+      setLevelIndicator("CLICK TO SPAWN PARTICLES");
+    }
+
+    function handleUncertainClick() {
+      const m = appState.mouse;
+
+      // Spawn particle at click location
+      const particle = {
+        x: m.x,
+        y: m.y,
+        vx: (Math.random() - 0.5) * 4,
+        vy: (Math.random() - 0.5) * 4,
+        age: 0
+      };
+      appState.uncertain.particles.push(particle);
+
+      // Update histogram
+      const binIndex = Math.floor((m.x / 600) * appState.uncertain.bins.length);
+      if (binIndex >= 0 && binIndex < appState.uncertain.bins.length) {
+        appState.uncertain.bins[binIndex]++;
+      }
+
+      setLevelIndicator(`PARTICLES: ${appState.uncertain.particles.length}`);
+    }
+
+    function updateUncertainGame() {
+      // Update particles with random walk
+      appState.uncertain.particles.forEach((p, i) => {
+        // Random walk
+        p.vx += (Math.random() - 0.5) * 0.5;
+        p.vy += (Math.random() - 0.5) * 0.5;
+
+        // Damping
+        p.vx *= 0.98;
+        p.vy *= 0.98;
+
+        p.x += p.vx;
+        p.y += p.vy;
+        p.age++;
+
+        // Bounce off walls
+        if (p.x < 0 || p.x > 600) p.vx *= -1;
+        if (p.y < 0 || p.y > 350) p.vy *= -1;
+        p.x = Math.max(0, Math.min(600, p.x));
+        p.y = Math.max(0, Math.min(350, p.y));
+      });
+
+      // Remove old particles
+      appState.uncertain.particles = appState.uncertain.particles.filter(p => p.age < 300);
     }
 
     // Drawing functions
@@ -995,6 +1060,63 @@ export default function GalacticGame() {
       drawBackButton();
     }
 
+    function drawUncertainGame() {
+      updateUncertainGame();
+
+      // Draw particles
+      appState.uncertain.particles.forEach(p => {
+        const alpha = 1 - (p.age / 300);
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = C_SIGNAL;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Draw trail
+        ctx.strokeStyle = C_SIGNAL;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x - p.vx * 3, p.y - p.vy * 3);
+        ctx.stroke();
+      });
+      ctx.globalAlpha = 1.0;
+
+      // Draw histogram at bottom
+      const histY = 360;
+      const histH = 80;
+      const binWidth = 600 / appState.uncertain.bins.length;
+      const maxBin = Math.max(1, ...appState.uncertain.bins);
+
+      ctx.strokeStyle = C_DIM;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(0, histY, 600, histH);
+
+      appState.uncertain.bins.forEach((count, i) => {
+        const x = i * binWidth;
+        const h = (count / maxBin) * histH;
+        ctx.fillStyle = C_MASTERY;
+        ctx.globalAlpha = 0.5;
+        ctx.fillRect(x, histY + histH - h, binWidth - 2, h);
+        ctx.globalAlpha = 1.0;
+
+        ctx.strokeStyle = C_MASTERY;
+        ctx.strokeRect(x, histY + histH - h, binWidth - 2, h);
+      });
+
+      // Draw center line
+      ctx.strokeStyle = C_NOISE;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(300, 0);
+      ctx.lineTo(300, histY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      drawBackButton();
+    }
+
     // Main draw loop
     function draw() {
       appState.frame++;
@@ -1012,6 +1134,8 @@ export default function GalacticGame() {
         drawBlobGame();
       } else if (appState.mode === MODE_GAME_CHANGE) {
         drawChangeGame();
+      } else if (appState.mode === MODE_GAME_UNCERTAIN) {
+        drawUncertainGame();
       }
 
       requestAnimationFrame(draw);
