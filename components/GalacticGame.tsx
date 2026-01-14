@@ -139,9 +139,23 @@ export default function GalacticGame() {
 
     // Game logic functions
     function handleInputDown() {
+      // Check for back button in game modes
+      if (appState.mode === MODE_GAME_LEVER || appState.mode === MODE_GAME_BLOB) {
+        const m = appState.mouse;
+        if (m.x < 80 && m.y < 40) {
+          returnToHub();
+          return;
+        }
+      }
+
       if (appState.mode === MODE_HUB) handleHubClick();
       else if (appState.mode === MODE_GAME_LEVER) handleLeverDown();
       else if (appState.mode === MODE_GAME_BLOB) handleBlobDown();
+    }
+
+    function returnToHub() {
+      appState.mode = MODE_HUB;
+      setLevelIndicator("");
     }
 
     function handleInputUp() {
@@ -531,6 +545,13 @@ export default function GalacticGame() {
           ctx.fill();
           ctx.globalAlpha = 1.0;
         }
+
+        // Draw label below dot
+        ctx.fillStyle = color;
+        ctx.font = "10px monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        ctx.fillText(n.label, n.x, n.y + n.r + 8);
       });
       ctx.shadowBlur = 0;
     }
@@ -608,6 +629,8 @@ export default function GalacticGame() {
         ctx.fillStyle = color;
         ctx.fillRect(0, 445, 600*(appState.lever.winT/60), 5);
       }
+
+      drawBackButton();
     }
 
     function drawBlock(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, c: string) {
@@ -629,6 +652,20 @@ export default function GalacticGame() {
       }
       ctx.fillRect(x-2, y-2, 4, 4);
       ctx.shadowBlur = 0;
+    }
+
+    function drawBackButton() {
+      ctx.fillStyle = C_SIGNAL;
+      ctx.strokeStyle = C_SIGNAL;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(10, 10, 60, 25);
+      ctx.globalAlpha = 0.2;
+      ctx.fillRect(10, 10, 60, 25);
+      ctx.globalAlpha = 1.0;
+      ctx.font = "14px monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("BACK", 40, 22.5);
     }
 
     function drawBlobGame() {
@@ -674,6 +711,8 @@ export default function GalacticGame() {
         }
       });
       ctx.shadowBlur = 0;
+
+      drawBackButton();
     }
 
     // Main draw loop
