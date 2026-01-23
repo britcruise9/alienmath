@@ -409,26 +409,65 @@ export default function GalacticGame() {
     function handleLeverUp() {
       if (!appState.lever.drag) return;
       const b = appState.lever.drag;
-      const FULCRUM_X = 300, FULCRUM_Y = 280, CELL = 40;
 
-      if (appState.mouse.y < 350) {
-        let bestS = 0, minD = Infinity;
-        for (let s = -5; s <= 5; s++) {
-          if (s === 0) continue;
-          const rad = appState.lever.ang * Math.PI/180;
-          const px = FULCRUM_X + Math.cos(rad)*s*CELL;
-          const py = FULCRUM_Y + Math.sin(rad)*s*CELL - 25;
-          const d = Math.hypot(px - appState.mouse.x, py - appState.mouse.y);
-          if (d < minD) { minD = d; bestS = s; }
+      // Multi-lever mode
+      if (appState.lever.multiLever) {
+        const CELL = 30;
+        const leverConfigs = [
+          { x: 300, y: 350, label: "A" },
+          { x: 300, y: 250, label: "B" },
+          { x: 300, y: 150, label: "C" }
+        ];
+
+        let placed = false;
+        leverConfigs.forEach((config, leverIdx) => {
+          if (Math.abs(appState.mouse.y - config.y) < 50) {
+            const lever = appState.lever.levers[leverIdx];
+            let bestS = 0, minD = Infinity;
+            for (let s = -4; s <= 4; s++) {
+              if (s === 0) continue;
+              const rad = lever.ang * Math.PI/180;
+              const px = config.x + Math.cos(rad)*s*CELL;
+              const py = config.y + Math.sin(rad)*s*CELL - 15;
+              const d = Math.hypot(px - appState.mouse.x, py - appState.mouse.y);
+              if (d < minD) { minD = d; bestS = s; }
+            }
+            if (minD < 40) {
+              b.slot = leverIdx * 10 + bestS;
+              placed = true;
+            }
+          }
+        });
+
+        if (!placed) {
+          b.slot = null;
+          b.y = 380;
+          b.x = Math.max(50, Math.min(550, appState.mouse.x));
         }
-        appState.lever.blocks = appState.lever.blocks.filter(i => i !== b);
-        appState.lever.blocks.push(b);
-        b.slot = bestS;
       } else {
-        b.slot = null;
-        b.y = 380;
-        b.x = Math.max(50, Math.min(550, appState.mouse.x));
+        // Single lever mode
+        const FULCRUM_X = 300, FULCRUM_Y = 280, CELL = 40;
+
+        if (appState.mouse.y < 350) {
+          let bestS = 0, minD = Infinity;
+          for (let s = -5; s <= 5; s++) {
+            if (s === 0) continue;
+            const rad = appState.lever.ang * Math.PI/180;
+            const px = FULCRUM_X + Math.cos(rad)*s*CELL;
+            const py = FULCRUM_Y + Math.sin(rad)*s*CELL - 25;
+            const d = Math.hypot(px - appState.mouse.x, py - appState.mouse.y);
+            if (d < minD) { minD = d; bestS = s; }
+          }
+          appState.lever.blocks = appState.lever.blocks.filter(i => i !== b);
+          appState.lever.blocks.push(b);
+          b.slot = bestS;
+        } else {
+          b.slot = null;
+          b.y = 380;
+          b.x = Math.max(50, Math.min(550, appState.mouse.x));
+        }
       }
+
       appState.lever.drag = null;
       checkLeverBalance();
     }
@@ -995,6 +1034,13 @@ export default function GalacticGame() {
     }
 
     function drawLeverGame() {
+      // Multi-lever mode
+      if (appState.lever.multiLever) {
+        drawMultiLeverGame();
+        return;
+      }
+
+      // Single lever mode
       if (appState.lever.drag) {
         appState.lever.drag.x = appState.mouse.x;
         appState.lever.drag.y = appState.mouse.y;
@@ -1065,6 +1111,140 @@ export default function GalacticGame() {
       // Win Bar
       if (appState.lever.winT > 0) {
         ctx.fillStyle = color;
+        ctx.fillRect(0, 445, 600*(appState.lever.winT/60), 5);
+      }
+
+      drawBackButton();
+    }
+
+    function drawMultiLeverGame() {
+      // Simplified multi-lever system: 3 independent levers
+      const CELL = 30;
+      const leverConfigs = [
+        { x: 300, y: 350, label: "A" },
+        { x: 300, y: 250, label: "B" },
+        { x: 300, y: 150, label: "C" }
+      ];
+
+      // Update dragging
+      if (appState.lever.drag) {
+        appState.lever.drag.x = appState.mouse.x;
+        appState.lever.drag.y = appState.mouse.y;
+      }
+
+      // Check balance for all levers
+      let allBalanced = true;
+      leverConfigs.forEach((config, leverIdx) => {
+        let L = 0, R = 0, hand = false;
+        appState.lever.blocks.forEach(b => {
+          if (b.slot === null || Math.floor(b.slot / 10) !== leverIdx) {
+            if (!b.fixed && b.slot === null) hand = true;
+            return;
+          }
+          const localSlot = b.slot % 10;
+          const t = Math.abs(localSlot) * b.w;
+          localSlot < 0 ? L += t : R += t;
+        });
+
+        const balanced = !hand && L === R;
+        if (!balanced) allBalanced = false;
+
+        // Update angles
+        const lever = appState.lever.levers[leverIdx];
+        if (hand) {
+          lever.tgtAng = L > R ? -15 : (R > L ? 15 : 0);
+        } else {
+          lever.tgtAng = L === R ? 0 : (L > R ? -15 : 15);
+        }
+        lever.ang += (lever.tgtAng - lever.ang) * 0.1;
+      });
+
+      // Win condition
+      if (allBalanced) {
+        appState.lever.winT++;
+        if (appState.lever.winT > 60) {
+          loadLeverLevel(appState.lever.levelIdx + 1);
+        }
+      } else {
+        appState.lever.winT = 0;
+      }
+
+      // Draw levers
+      leverConfigs.forEach((config, leverIdx) => {
+        const lever = appState.lever.levers[leverIdx];
+
+        // Fulcrum
+        ctx.fillStyle = C_DIM;
+        ctx.beginPath();
+        ctx.moveTo(config.x, config.y);
+        ctx.lineTo(config.x - 10, config.y + 20);
+        ctx.lineTo(config.x + 10, config.y + 20);
+        ctx.fill();
+
+        // Label
+        ctx.fillStyle = C_SIGNAL;
+        ctx.font = "12px monospace";
+        ctx.textAlign = "left";
+        ctx.fillText(config.label, config.x - 50, config.y + 5);
+
+        // Lever bar
+        ctx.save();
+        ctx.translate(config.x, config.y);
+        ctx.rotate(lever.ang * Math.PI/180);
+
+        const balanced = Math.abs(lever.tgtAng) < 0.1;
+        ctx.strokeStyle = balanced ? C_SIGNAL : C_DIM;
+        ctx.fillStyle = balanced ? C_SIGNAL : C_DIM;
+        ctx.lineWidth = 2;
+        ctx.fillRect(-150, -3, 300, 6);
+
+        // Slots
+        ctx.fillStyle = C_BG;
+        for (let s = -4; s <= 4; s++) {
+          if (s !== 0) {
+            ctx.beginPath();
+            ctx.arc(s*CELL, 0, 2, 0, 6.28);
+            ctx.fill();
+          }
+        }
+
+        // Blocks on this lever
+        let hMap: {[key: number]: number} = {};
+        appState.lever.blocks.forEach(b => {
+          if (b.slot !== null && Math.floor(b.slot / 10) === leverIdx && b !== appState.lever.drag) {
+            const localSlot = b.slot % 10;
+            if (!hMap[localSlot]) hMap[localSlot] = 0;
+            let h = b.w * CELL;
+            const blockCtx = ctx;
+            blockCtx.shadowBlur = 10;
+            blockCtx.shadowColor = b.c;
+            blockCtx.strokeStyle = b.c;
+            blockCtx.lineWidth = 2;
+            const bx = localSlot * CELL;
+            const by = -3 - hMap[localSlot] - h/2;
+            const bw = 20;
+            blockCtx.strokeRect(bx-bw/2, by-h/2, bw, h);
+            blockCtx.fillStyle = b.c;
+            blockCtx.globalAlpha = 0.2;
+            blockCtx.fillRect(bx-bw/2, by-h/2, bw, h);
+            blockCtx.globalAlpha = 1.0;
+            blockCtx.shadowBlur = 0;
+            hMap[localSlot] += h;
+          }
+        });
+        ctx.restore();
+      });
+
+      // Blocks off levers
+      appState.lever.blocks.forEach(b => {
+        if (b.slot === null || b === appState.lever.drag) {
+          drawBlock(ctx, b.x, b.y, b.w, b.c);
+        }
+      });
+
+      // Win bar
+      if (appState.lever.winT > 0) {
+        ctx.fillStyle = C_SIGNAL;
         ctx.fillRect(0, 445, 600*(appState.lever.winT/60), 5);
       }
 
