@@ -689,10 +689,10 @@ export default function GalacticGame() {
     }
 
     function checkNestedBalance() {
-      // Check mini lever balance (slots >= 100)
+      // Check mini lever balance (slots 97-99 left, 101-103 right)
       let miniL = 0, miniR = 0;
       appState.nested.blocks.forEach(b => {
-        if (b.slot !== null && b.slot >= 100) {
+        if (b.slot !== null && b.slot >= 97 && b.slot <= 103 && b.slot !== 100) {
           const localSlot = b.slot - 100;
           const t = Math.abs(localSlot) * b.w;
           localSlot < 0 ? miniL += t : miniR += t;
@@ -1106,7 +1106,7 @@ export default function GalacticGame() {
       // Draw blocks on mini lever
       let miniHMap: {[key: number]: number} = {};
       appState.nested.blocks.forEach(b => {
-        if (b.slot !== null && b.slot >= 100 && b !== appState.nested.drag) {
+        if (b.slot !== null && b.slot >= 97 && b.slot <= 103 && b.slot !== 100 && b !== appState.nested.drag) {
           let localSlot = b.slot - 100;
           if (!miniHMap[localSlot]) miniHMap[localSlot] = 0;
           let h = b.w * MINI_CELL;
