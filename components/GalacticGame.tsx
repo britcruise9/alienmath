@@ -362,9 +362,15 @@ export default function GalacticGame() {
           const d = Math.hypot(px - appState.mouse.x, py - appState.mouse.y);
           if (d < minD) { minD = d; bestS = s; }
         }
-        appState.lever.blocks = appState.lever.blocks.filter(i => i !== b);
-        appState.lever.blocks.push(b);
-        b.slot = bestS;
+        if (minD < 60) {
+          appState.lever.blocks = appState.lever.blocks.filter(i => i !== b);
+          appState.lever.blocks.push(b);
+          b.slot = bestS;
+        } else {
+          b.slot = null;
+          b.y = 380;
+          b.x = Math.max(50, Math.min(550, appState.mouse.x));
+        }
       } else {
         b.slot = null;
         b.y = 380;
@@ -488,9 +494,15 @@ export default function GalacticGame() {
           const d = Math.hypot(px - appState.mouse.x, py - appState.mouse.y);
           if (d < minD) { minD = d; bestS = s; }
         }
-        appState.colorBalance.blocks = appState.colorBalance.blocks.filter(i => i !== b);
-        appState.colorBalance.blocks.push(b);
-        b.slot = bestS;
+        if (minD < 60) {
+          appState.colorBalance.blocks = appState.colorBalance.blocks.filter(i => i !== b);
+          appState.colorBalance.blocks.push(b);
+          b.slot = bestS;
+        } else {
+          b.slot = null;
+          b.y = 380;
+          b.x = Math.max(50, Math.min(550, appState.mouse.x));
+        }
       } else {
         b.slot = null;
         b.y = 380;
@@ -639,7 +651,7 @@ export default function GalacticGame() {
         if (d < minD) { minD = d; bestS = s; }
       }
 
-      if (minD < 40) {
+      if (minD < 60) {
         appState.nested.blocks = appState.nested.blocks.filter(i => i !== b);
         appState.nested.blocks.push(b);
         b.slot = 100 + bestS;
@@ -659,7 +671,7 @@ export default function GalacticGame() {
         if (d < minD) { minD = d; bestS = s; }
       }
 
-      if (minD < 40) {
+      if (minD < 60) {
         appState.nested.blocks = appState.nested.blocks.filter(i => i !== b);
         appState.nested.blocks.push(b);
         b.slot = bestS;
@@ -678,31 +690,24 @@ export default function GalacticGame() {
 
     function checkNestedBalance() {
       // Check mini lever balance (slots >= 100)
-      let miniL = 0, miniR = 0, miniHand = false;
+      let miniL = 0, miniR = 0;
       appState.nested.blocks.forEach(b => {
         if (b.slot !== null && b.slot >= 100) {
           const localSlot = b.slot - 100;
           const t = Math.abs(localSlot) * b.w;
           localSlot < 0 ? miniL += t : miniR += t;
-        } else if (b.slot === null && !b.fixed) {
-          miniHand = true;
         }
       });
 
-      if (miniHand) {
-        appState.nested.miniTgtAng = miniL > miniR ? -15 : (miniR > miniL ? 15 : 0);
-      } else {
-        appState.nested.miniTgtAng = miniL === miniR ? 0 : (miniL > miniR ? -15 : 15);
-      }
+      // Always update mini lever angle based on current state
+      appState.nested.miniTgtAng = miniL === miniR ? 0 : (miniL > miniR ? -15 : 15);
 
       // Check main lever balance
-      let mainL = 0, mainR = 0, mainHand = false;
+      let mainL = 0, mainR = 0;
       appState.nested.blocks.forEach(b => {
         if (b.slot !== null && b.slot < 100) {
           const t = Math.abs(b.slot) * b.w;
           b.slot < 0 ? mainL += t : mainR += t;
-        } else if (b.slot === null && !b.fixed) {
-          mainHand = true;
         }
       });
 
@@ -710,14 +715,12 @@ export default function GalacticGame() {
       const miniTotalWeight = miniL + miniR;
       mainR += miniTotalWeight * 4;
 
-      if (mainHand) {
-        appState.nested.mainTgtAng = mainL > mainR ? -15 : (mainR > mainL ? 15 : 0);
-      } else {
-        appState.nested.mainTgtAng = mainL === mainR ? 0 : (mainL > mainR ? -15 : 15);
-      }
+      // Always update main lever angle based on current state
+      appState.nested.mainTgtAng = mainL === mainR ? 0 : (mainL > mainR ? -15 : 15);
 
-      // Win condition
-      if (!miniHand && !mainHand && miniL === miniR && mainL === mainR && miniTotalWeight > 0) {
+      // Win condition - all blocks must be placed
+      const allPlaced = appState.nested.blocks.every(b => b.slot !== null);
+      if (allPlaced && miniL === miniR && mainL === mainR && miniTotalWeight > 0) {
         appState.nested.winT++;
         if (appState.nested.winT > 30) {
           setLevelIndicator("✓ BOTH BALANCED");
@@ -757,8 +760,9 @@ export default function GalacticGame() {
       ctx.fillText("BACK", 40, 22.5);
     }
 
-    function drawBlock(x: number, y: number, w: number, c: string) {
-      let h = w*40 - 8, wid = 32;
+    function drawBlock(x: number, y: number, w: number, c: string, sameSize: boolean = false) {
+      let h = sameSize ? 32 : (w*40 - 8);
+      let wid = 32;
       ctx.shadowBlur = 15;
       ctx.shadowColor = c;
       ctx.strokeStyle = c;
@@ -769,7 +773,7 @@ export default function GalacticGame() {
       ctx.fillRect(x-wid/2, y-h/2, wid, h);
       ctx.globalAlpha = 1.0;
       ctx.fillStyle = c;
-      if (w > 1) {
+      if (!sameSize && w > 1) {
         for (let i = 1; i < w; i++) {
           ctx.fillRect(x-wid/2+4, y-h/2+i*40-1, wid-8, 2);
         }
@@ -984,13 +988,13 @@ export default function GalacticGame() {
         if (b.slot !== null && b !== appState.colorBalance.drag) {
           let s = b.slot;
           if (!hMap[s]) hMap[s] = 0;
-          let h = b.w * CELL;
+          let h = 32; // All blocks same size
           const bx = s*CELL;
           const by = -5 - hMap[s] - h/2;
           ctx.save();
           ctx.translate(bx, by);
           ctx.rotate(-appState.colorBalance.ang * Math.PI/180);
-          drawBlock(0, 0, b.w, b.c);
+          drawBlock(0, 0, b.w, b.c, true);
           ctx.restore();
           hMap[s] += h;
         }
@@ -999,7 +1003,7 @@ export default function GalacticGame() {
 
       appState.colorBalance.blocks.forEach(b => {
         if (b.slot === null || b === appState.colorBalance.drag) {
-          drawBlock(b.x, b.y, b.w, b.c);
+          drawBlock(b.x, b.y, b.w, b.c, true);
         }
       });
 
