@@ -759,11 +759,8 @@ export default function GalacticGame() {
       });
 
       // Mini lever tilts based on its own balance
-      // We store the target tilt (not including counter-rotation) for smoothing
-      const miniTiltTarget = miniL === miniR ? 0 : (miniL > miniR ? -15 : 15);
-
-      // Smooth only the tilt component
-      appState.nested.miniSmoothTilt += (miniTiltTarget - appState.nested.miniSmoothTilt) * 0.1;
+      // Set the tilt directly (no smoothing) so it instantly responds to balance changes
+      appState.nested.miniSmoothTilt = miniL === miniR ? 0 : (miniL > miniR ? -15 : 15);
 
       // Check main lever balance (exclude mini lever slots 97-103)
       let mainL = 0, mainR = 0;
