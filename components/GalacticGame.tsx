@@ -89,7 +89,8 @@ export default function GalacticGame() {
       levelIdx: 0,
       sequence: [] as string[],
       userAnswer: [] as string[],
-      numBlanks: 0
+      numBlanks: 0,
+      selectedColor: 'A' as string
     },
     lever: {
       levelIdx: 0,
@@ -226,6 +227,21 @@ export default function GalacticGame() {
 
     function handlePatternClick() {
       const m = appState.mouse;
+      const paletteX = 50;
+      const paletteY1 = 150;
+      const paletteY2 = 300;
+
+      // Check palette circles first
+      if (Math.hypot(m.x - paletteX, m.y - paletteY1) < 25) {
+        appState.pattern.selectedColor = 'A';
+        return;
+      }
+      if (Math.hypot(m.x - paletteX, m.y - paletteY2) < 25) {
+        appState.pattern.selectedColor = 'B';
+        return;
+      }
+
+      // Check blank cells
       const cellSize = 60;
       const startX = 100;
       const seqY = 225;
@@ -234,12 +250,11 @@ export default function GalacticGame() {
         const cellIdx = appState.pattern.sequence.length + i;
         const cx = startX + cellIdx * cellSize;
         if (Math.abs(m.x - cx) < cellSize/2 && Math.abs(m.y - seqY) < cellSize/2) {
-          if (!appState.pattern.userAnswer[i]) {
-            appState.pattern.userAnswer[i] = 'A';
-          } else if (appState.pattern.userAnswer[i] === 'A') {
-            appState.pattern.userAnswer[i] = 'B';
-          } else {
+          // Paint with selected color, or clear if clicking same color
+          if (appState.pattern.userAnswer[i] === appState.pattern.selectedColor) {
             appState.pattern.userAnswer[i] = '';
+          } else {
+            appState.pattern.userAnswer[i] = appState.pattern.selectedColor;
           }
           checkPatternAnswer();
           return;
@@ -843,15 +858,31 @@ export default function GalacticGame() {
       const paletteY1 = 150;
       const paletteY2 = 300;
 
+      // Cyan circle
       ctx.fillStyle = C_MASTERY;
       ctx.beginPath();
       ctx.arc(paletteX, paletteY1, 20, 0, Math.PI * 2);
       ctx.fill();
+      if (appState.pattern.selectedColor === 'A') {
+        ctx.strokeStyle = C_SIGNAL;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(paletteX, paletteY1, 25, 0, Math.PI * 2);
+        ctx.stroke();
+      }
 
+      // Red circle
       ctx.fillStyle = C_ALERT;
       ctx.beginPath();
       ctx.arc(paletteX, paletteY2, 20, 0, Math.PI * 2);
       ctx.fill();
+      if (appState.pattern.selectedColor === 'B') {
+        ctx.strokeStyle = C_SIGNAL;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(paletteX, paletteY2, 25, 0, Math.PI * 2);
+        ctx.stroke();
+      }
 
       drawBackButton();
     }
@@ -1055,10 +1086,10 @@ export default function GalacticGame() {
         }
       }
 
-      // Draw blocks on main lever (excluding mini lever position)
+      // Draw blocks on main lever (excluding mini lever slots 97-103)
       let mainHMap: {[key: number]: number} = {};
       appState.nested.blocks.forEach(b => {
-        if (b.slot !== null && b.slot < 100 && b !== appState.nested.drag) {
+        if (b.slot !== null && b.slot < 97 && b !== appState.nested.drag) {
           let s = b.slot;
           if (!mainHMap[s]) mainHMap[s] = 0;
           let h = b.w * MAIN_CELL;
