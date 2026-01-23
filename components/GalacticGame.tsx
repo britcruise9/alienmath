@@ -114,7 +114,7 @@ export default function GalacticGame() {
       mainAng: 0,
       mainTgtAng: 0,
       miniAng: 0,
-      miniTgtAng: 0,
+      miniSmoothTilt: 0,
       blocks: [] as Block[],
       drag: null as Block | null,
       winT: 0
@@ -368,12 +368,23 @@ export default function GalacticGame() {
       const FULCRUM_X = 300, FULCRUM_Y = 280, CELL = 40;
 
       if (appState.mouse.y < 350) {
+        // Calculate existing stack heights for all slots
+        let hMap: {[key: number]: number} = {};
+        appState.lever.blocks.forEach(block => {
+          if (block.slot !== null && block !== b) {
+            const s = block.slot;
+            if (!hMap[s]) hMap[s] = 0;
+            hMap[s] += block.w * CELL;
+          }
+        });
+
         let bestS = 0, minD = Infinity;
         for (let s = -5; s <= 5; s++) {
           if (s === 0) continue;
           const rad = appState.lever.ang * Math.PI/180;
+          const stackHeight = hMap[s] || 0;
           const px = FULCRUM_X + Math.cos(rad)*s*CELL;
-          const py = FULCRUM_Y + Math.sin(rad)*s*CELL - 25;
+          const py = FULCRUM_Y + Math.sin(rad)*s*CELL - 25 - stackHeight;
           const d = Math.hypot(px - appState.mouse.x, py - appState.mouse.y);
           if (d < minD) { minD = d; bestS = s; }
         }
@@ -500,12 +511,23 @@ export default function GalacticGame() {
       const FULCRUM_X = 300, FULCRUM_Y = 280, CELL = 40;
 
       if (appState.mouse.y < 350) {
+        // Calculate existing stack heights for all slots
+        let hMap: {[key: number]: number} = {};
+        appState.colorBalance.blocks.forEach(block => {
+          if (block.slot !== null && block !== b) {
+            const s = block.slot;
+            if (!hMap[s]) hMap[s] = 0;
+            hMap[s] += 32; // All blocks same size in color balance
+          }
+        });
+
         let bestS = 0, minD = Infinity;
         for (let s = -5; s <= 5; s++) {
           if (s === 0) continue;
           const rad = appState.colorBalance.ang * Math.PI/180;
+          const stackHeight = hMap[s] || 0;
           const px = FULCRUM_X + Math.cos(rad)*s*CELL;
-          const py = FULCRUM_Y + Math.sin(rad)*s*CELL - 25;
+          const py = FULCRUM_Y + Math.sin(rad)*s*CELL - 25 - stackHeight;
           const d = Math.hypot(px - appState.mouse.x, py - appState.mouse.y);
           if (d < minD) { minD = d; bestS = s; }
         }
@@ -559,7 +581,7 @@ export default function GalacticGame() {
       appState.nested.mainAng = 0;
       appState.nested.mainTgtAng = 0;
       appState.nested.miniAng = 0;
-      appState.nested.miniTgtAng = 0;
+      appState.nested.miniSmoothTilt = 0;
       appState.nested.blocks = [];
       appState.nested.winT = 0;
 
@@ -650,6 +672,26 @@ export default function GalacticGame() {
       const MAIN_X = 300, MAIN_Y = 280, MAIN_CELL = 40;
       const MINI_CELL = 30, MINI_POS = 4;
 
+      // Calculate existing stack heights for mini lever
+      let miniHMap: {[key: number]: number} = {};
+      appState.nested.blocks.forEach(block => {
+        if (block.slot !== null && block.slot >= 97 && block.slot <= 103 && block.slot !== 100 && block !== b) {
+          const localSlot = block.slot - 100;
+          if (!miniHMap[localSlot]) miniHMap[localSlot] = 0;
+          miniHMap[localSlot] += block.w * MINI_CELL;
+        }
+      });
+
+      // Calculate existing stack heights for main lever
+      let mainHMap: {[key: number]: number} = {};
+      appState.nested.blocks.forEach(block => {
+        if (block.slot !== null && block.slot < 97 && block !== b) {
+          const s = block.slot;
+          if (!mainHMap[s]) mainHMap[s] = 0;
+          mainHMap[s] += block.w * MAIN_CELL;
+        }
+      });
+
       // Calculate mini lever world position
       const mainRad = appState.nested.mainAng * Math.PI/180;
       const miniWorldX = MAIN_X + Math.cos(mainRad) * MINI_POS * MAIN_CELL;
@@ -660,8 +702,9 @@ export default function GalacticGame() {
       for (let s = -3; s <= 3; s++) {
         if (s === 0) continue;
         const totalRad = (appState.nested.mainAng + appState.nested.miniAng) * Math.PI/180;
+        const stackHeight = miniHMap[s] || 0;
         const px = miniWorldX + Math.cos(totalRad)*s*MINI_CELL;
-        const py = miniWorldY + Math.sin(totalRad)*s*MINI_CELL - 15;
+        const py = miniWorldY + Math.sin(totalRad)*s*MINI_CELL - 15 - stackHeight;
         const d = Math.hypot(px - appState.mouse.x, py - appState.mouse.y);
         if (d < minD) { minD = d; bestS = s; }
       }
@@ -680,8 +723,9 @@ export default function GalacticGame() {
       for (let s = -5; s <= 5; s++) {
         if (s === 0) continue;
         const rad = appState.nested.mainAng * Math.PI/180;
+        const stackHeight = mainHMap[s] || 0;
         const px = MAIN_X + Math.cos(rad)*s*MAIN_CELL;
-        const py = MAIN_Y + Math.sin(rad)*s*MAIN_CELL - 25;
+        const py = MAIN_Y + Math.sin(rad)*s*MAIN_CELL - 25 - stackHeight;
         const d = Math.hypot(px - appState.mouse.x, py - appState.mouse.y);
         if (d < minD) { minD = d; bestS = s; }
       }
@@ -714,10 +758,12 @@ export default function GalacticGame() {
         }
       });
 
-      // Mini lever tilts based on its own balance (gravity is absolute, not relative to main lever)
-      // To stay horizontal on screen when balanced, it must counter-rotate the main lever's angle
-      const miniTilt = miniL === miniR ? 0 : (miniL > miniR ? -15 : 15);
-      appState.nested.miniTgtAng = -appState.nested.mainAng + miniTilt;
+      // Mini lever tilts based on its own balance
+      // We store the target tilt (not including counter-rotation) for smoothing
+      const miniTiltTarget = miniL === miniR ? 0 : (miniL > miniR ? -15 : 15);
+
+      // Smooth only the tilt component
+      appState.nested.miniSmoothTilt += (miniTiltTarget - appState.nested.miniSmoothTilt) * 0.1;
 
       // Check main lever balance (exclude mini lever slots 97-103)
       let mainL = 0, mainR = 0;
@@ -1054,8 +1100,12 @@ export default function GalacticGame() {
         appState.nested.drag.x = appState.mouse.x;
         appState.nested.drag.y = appState.mouse.y;
       }
+      // Smooth main lever angle
       appState.nested.mainAng += (appState.nested.mainTgtAng - appState.nested.mainAng) * 0.1;
-      appState.nested.miniAng += (appState.nested.miniTgtAng - appState.nested.miniAng) * 0.1;
+
+      // Mini lever uses absolute gravity: counter-rotate main angle + smooth tilt
+      // This ensures mini lever stays horizontal on screen when balanced, regardless of main lever angle
+      appState.nested.miniAng = -appState.nested.mainAng + appState.nested.miniSmoothTilt;
 
       const MAIN_X = 300, MAIN_Y = 280, MAIN_CELL = 40;
       const MINI_CELL = 30;
