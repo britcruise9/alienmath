@@ -77,14 +77,14 @@ export default function GalacticGame() {
   const [levelIndicator, setLevelIndicator] = useState("");
 
   const appStateRef = useRef({
-    mode: MODE_HUB,
+    mode: MODE_PATTERN,
     mouse: {x: 0, y: 0, down: false},
-    debugSteps: [
-      { id: 1, x: 150, y: 225, r: 20, label: "PATTERN" },
-      { id: 2, x: 250, y: 225, r: 20, label: "SIMPLE" },
-      { id: 3, x: 350, y: 225, r: 20, label: "COLOR" },
-      { id: 4, x: 450, y: 225, r: 20, label: "NESTED" }
-    ],
+    completed: {
+      pattern: false,
+      simple: false,
+      color: false,
+      nested: false
+    },
     pattern: {
       levelIdx: 0,
       sequence: [] as string[],
@@ -161,20 +161,33 @@ export default function GalacticGame() {
     window.addEventListener('mouseup', handleMouseUp);
     window.addEventListener('touchend', handleMouseUp);
 
+    // Initialize - start with first pattern level
+    loadPatternLevel(0);
+
     // Input routing
     function handleInputDown() {
-      // Back button
-      if (appState.mode !== MODE_HUB) {
-        const m = appState.mouse;
-        if (m.x < 80 && m.y < 40) {
-          appState.mode = MODE_HUB;
-          setLevelIndicator("");
-          return;
+      // Check completion dots at top (always visible)
+      const m = appState.mouse;
+      const dotY = 20;
+      const dots = [
+        { x: 150, completed: appState.completed.pattern, mode: MODE_PATTERN, start: startPatternGame },
+        { x: 250, completed: appState.completed.simple, mode: MODE_SIMPLE_BALANCE, start: startSimpleBalance },
+        { x: 350, completed: appState.completed.color, mode: MODE_COLOR_BALANCE, start: startColorBalance },
+        { x: 450, completed: appState.completed.nested, mode: MODE_NESTED_BALANCE, start: startNestedBalance }
+      ];
+
+      for (let i = 0; i < dots.length; i++) {
+        const dot = dots[i];
+        if (Math.hypot(m.x - dot.x, m.y - dotY) < 15) {
+          // Can only go back to completed steps or current step
+          if (dot.completed || dot.mode === appState.mode) {
+            dot.start();
+            return;
+          }
         }
       }
 
-      if (appState.mode === MODE_HUB) handleHubClick();
-      else if (appState.mode === MODE_PATTERN) handlePatternClick();
+      if (appState.mode === MODE_PATTERN) handlePatternClick();
       else if (appState.mode === MODE_SIMPLE_BALANCE) handleLeverDown();
       else if (appState.mode === MODE_COLOR_BALANCE) handleColorDown();
       else if (appState.mode === MODE_NESTED_BALANCE) handleNestedDown();
@@ -186,19 +199,6 @@ export default function GalacticGame() {
       else if (appState.mode === MODE_NESTED_BALANCE) handleNestedUp();
     }
 
-    function handleHubClick() {
-      const m = appState.mouse;
-      appState.debugSteps.forEach((step, i) => {
-        const d = Math.hypot(m.x - step.x, m.y - step.y);
-        if (d < step.r + 10) {
-          if (i === 0) startPatternGame();
-          else if (i === 1) startSimpleBalance();
-          else if (i === 2) startColorBalance();
-          else if (i === 3) startNestedBalance();
-        }
-      });
-    }
-
     // ========== PATTERN GAME ==========
     function startPatternGame() {
       appState.mode = MODE_PATTERN;
@@ -208,8 +208,8 @@ export default function GalacticGame() {
 
     function loadPatternLevel(idx: number) {
       if (idx >= PATTERN_LEVELS.length) {
-        appState.mode = MODE_HUB;
-        setLevelIndicator("");
+        appState.completed.pattern = true;
+        startSimpleBalance();
         return;
       }
 
@@ -296,8 +296,8 @@ export default function GalacticGame() {
 
     function loadLeverLevel(idx: number) {
       if (idx >= LEVER_LEVELS.length) {
-        appState.mode = MODE_HUB;
-        setLevelIndicator("");
+        appState.completed.simple = true;
+        startColorBalance();
         return;
       }
 
@@ -441,8 +441,8 @@ export default function GalacticGame() {
 
     function loadColorLevel(idx: number) {
       if (idx >= COLOR_LEVELS.length) {
-        appState.mode = MODE_HUB;
-        setLevelIndicator("");
+        appState.completed.color = true;
+        startNestedBalance();
         return;
       }
 
@@ -770,15 +770,11 @@ export default function GalacticGame() {
           // Only slots below 97 count on main lever
           const t = Math.abs(b.slot) * b.w;
           b.slot < 0 ? mainL += t : mainR += t;
-          console.log(`Main lever block: slot=${b.slot}, weight=${b.w}, torque=${t}, side=${b.slot < 0 ? 'LEFT' : 'RIGHT'}`);
         }
       });
 
       // Add mini lever total weight as point mass at position +4 on right side
-      console.log(`Mini lever: L=${miniL}, R=${miniR}, total weight=${miniTotalWeight}`);
-      console.log(`Before mini lever: mainL=${mainL}, mainR=${mainR}`);
       mainR += miniTotalWeight * 4;
-      console.log(`After mini lever: mainL=${mainL}, mainR=${mainR}, balanced=${mainL === mainR}`);
 
       // Main lever tilts based on its balance
       appState.nested.mainTgtAng = mainL === mainR ? 0 : (mainL > mainR ? -15 : 15);
@@ -788,7 +784,8 @@ export default function GalacticGame() {
       if (allPlaced && miniL === miniR && mainL === mainR && miniTotalWeight > 0) {
         appState.nested.winT++;
         if (appState.nested.winT > 30) {
-          setLevelIndicator("✓ BOTH BALANCED");
+          appState.completed.nested = true;
+          setLevelIndicator("✓ ALL COMPLETE");
         }
       } else {
         appState.nested.winT = 0;
@@ -811,18 +808,35 @@ export default function GalacticGame() {
       ctx.stroke();
     }
 
-    function drawBackButton() {
-      ctx.fillStyle = C_SIGNAL;
-      ctx.strokeStyle = C_SIGNAL;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(10, 10, 60, 25);
-      ctx.globalAlpha = 0.2;
-      ctx.fillRect(10, 10, 60, 25);
-      ctx.globalAlpha = 1.0;
-      ctx.font = "14px monospace";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("BACK", 40, 22.5);
+    function drawCompletionDots() {
+      const dotY = 20;
+      const dots = [
+        { x: 150, completed: appState.completed.pattern, current: appState.mode === MODE_PATTERN },
+        { x: 250, completed: appState.completed.simple, current: appState.mode === MODE_SIMPLE_BALANCE },
+        { x: 350, completed: appState.completed.color, current: appState.mode === MODE_COLOR_BALANCE },
+        { x: 450, completed: appState.completed.nested, current: appState.mode === MODE_NESTED_BALANCE }
+      ];
+
+      dots.forEach(dot => {
+        ctx.beginPath();
+        ctx.arc(dot.x, dotY, 8, 0, Math.PI * 2);
+
+        if (dot.completed) {
+          // Filled dot for completed
+          ctx.fillStyle = C_SIGNAL;
+          ctx.fill();
+        } else if (dot.current) {
+          // Outlined dot for current
+          ctx.strokeStyle = C_SIGNAL;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        } else {
+          // Dim dot for not yet reached
+          ctx.strokeStyle = C_DIM;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+      });
     }
 
     function drawBlock(x: number, y: number, w: number, c: string, sameSize: boolean = false) {
@@ -847,21 +861,6 @@ export default function GalacticGame() {
       ctx.shadowBlur = 0;
     }
 
-    function drawHub() {
-      appState.debugSteps.forEach((step) => {
-        ctx.strokeStyle = C_SIGNAL;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(step.x, step.y, step.r, 0, Math.PI*2);
-        ctx.stroke();
-
-        ctx.fillStyle = C_SIGNAL;
-        ctx.font = "10px monospace";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "top";
-        ctx.fillText(step.label, step.x, step.y + step.r + 8);
-      });
-    }
 
     function drawPattern() {
       const cellSize = 60;
@@ -932,8 +931,6 @@ export default function GalacticGame() {
         ctx.arc(paletteX, paletteY2, 25, 0, Math.PI * 2);
         ctx.stroke();
       }
-
-      drawBackButton();
     }
 
     function drawLever() {
@@ -1015,8 +1012,6 @@ export default function GalacticGame() {
         ctx.fillStyle = color;
         ctx.fillRect(0, 445, 600*(appState.lever.winT/60), 5);
       }
-
-      drawBackButton();
     }
 
     function drawColorBalance() {
@@ -1092,8 +1087,6 @@ export default function GalacticGame() {
         ctx.fillStyle = color;
         ctx.fillRect(0, 445, 600*(appState.colorBalance.winT/60), 5);
       }
-
-      drawBackButton();
     }
 
     function drawNested() {
@@ -1222,17 +1215,15 @@ export default function GalacticGame() {
         ctx.fillStyle = C_SIGNAL;
         ctx.fillRect(0, 445, 600*(appState.nested.winT/30), 5);
       }
-
-      drawBackButton();
     }
 
     function draw() {
       ctx.fillStyle = C_BG;
       ctx.fillRect(0, 0, 600, 450);
       drawGrid();
+      drawCompletionDots();
 
-      if (appState.mode === MODE_HUB) drawHub();
-      else if (appState.mode === MODE_PATTERN) drawPattern();
+      if (appState.mode === MODE_PATTERN) drawPattern();
       else if (appState.mode === MODE_SIMPLE_BALANCE) drawLever();
       else if (appState.mode === MODE_COLOR_BALANCE) drawColorBalance();
       else if (appState.mode === MODE_NESTED_BALANCE) drawNested();
