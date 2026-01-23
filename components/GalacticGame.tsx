@@ -334,7 +334,7 @@ export default function GalacticGame() {
       for (let i = appState.lever.blocks.length - 1; i >= 0; i--) {
         const b = appState.lever.blocks[i];
         if (b.fixed || b.slot !== null) continue;
-        if (Math.abs(m.x - b.x) < 20 && Math.abs(m.y - b.y) < (b.w*40)/2) {
+        if (Math.abs(m.x - b.x) < 30 && Math.abs(m.y - b.y) < 30 + (b.w*20)) {
           appState.lever.drag = b;
           checkLeverBalance();
           return;
@@ -347,9 +347,9 @@ export default function GalacticGame() {
       const rad = -appState.lever.ang * Math.PI/180;
       const lx = dx*Math.cos(rad) - dy*Math.sin(rad);
       const ly = dx*Math.sin(rad) + dy*Math.cos(rad);
-      if (ly > 150) return; // Allow clicking on tall stacks (increased from 10)
+      if (ly > 200) return; // Allow clicking on very tall stacks
       const slot = Math.round(lx/CELL);
-      if (Math.abs(slot) <= 5 && slot !== 0 && Math.abs(lx - slot*CELL) < 20) {
+      if (Math.abs(slot) <= 5 && slot !== 0 && Math.abs(lx - slot*CELL) < 30) {
         const inSlot = appState.lever.blocks.filter(b => b.slot === slot);
         if (inSlot.length > 0) {
           const top = inSlot[inSlot.length-1];
@@ -467,7 +467,7 @@ export default function GalacticGame() {
       for (let i = appState.colorBalance.blocks.length - 1; i >= 0; i--) {
         const b = appState.colorBalance.blocks[i];
         if (b.fixed || b.slot !== null) continue;
-        if (Math.abs(m.x - b.x) < 20 && Math.abs(m.y - b.y) < 20) {
+        if (Math.abs(m.x - b.x) < 30 && Math.abs(m.y - b.y) < 30) {
           appState.colorBalance.drag = b;
           checkColorBalance();
           return;
@@ -479,9 +479,9 @@ export default function GalacticGame() {
       const rad = -appState.colorBalance.ang * Math.PI/180;
       const lx = dx*Math.cos(rad) - dy*Math.sin(rad);
       const ly = dx*Math.sin(rad) + dy*Math.cos(rad);
-      if (ly > 150) return; // Allow clicking on tall stacks
+      if (ly > 200) return; // Allow clicking on very tall stacks
       const slot = Math.round(lx/CELL);
-      if (Math.abs(slot) <= 5 && slot !== 0 && Math.abs(lx - slot*CELL) < 20) {
+      if (Math.abs(slot) <= 5 && slot !== 0 && Math.abs(lx - slot*CELL) < 30) {
         const inSlot = appState.colorBalance.blocks.filter(b => b.slot === slot);
         if (inSlot.length > 0) {
           const top = inSlot[inSlot.length-1];
@@ -628,9 +628,9 @@ export default function GalacticGame() {
       const rad = -appState.nested.mainAng * Math.PI/180;
       lx = dx*Math.cos(rad) - dy*Math.sin(rad);
       ly = dx*Math.sin(rad) + dy*Math.cos(rad);
-      if (ly > 150) return; // Allow clicking on tall stacks
+      if (ly > 200) return; // Allow clicking on very tall stacks
       const slot = Math.round(lx/MAIN_CELL);
-      if (Math.abs(slot) <= 5 && slot !== 0 && Math.abs(lx - slot*MAIN_CELL) < 20) {
+      if (Math.abs(slot) <= 5 && slot !== 0 && Math.abs(lx - slot*MAIN_CELL) < 30) {
         const inSlot = appState.nested.blocks.filter(b => b.slot === slot);
         if (inSlot.length > 0) {
           const top = inSlot[inSlot.length-1];
@@ -715,7 +715,9 @@ export default function GalacticGame() {
       });
 
       // Mini lever tilts based on its own balance (gravity is absolute, not relative to main lever)
-      appState.nested.miniTgtAng = miniL === miniR ? 0 : (miniL > miniR ? -15 : 15);
+      // To stay horizontal on screen when balanced, it must counter-rotate the main lever's angle
+      const miniTilt = miniL === miniR ? 0 : (miniL > miniR ? -15 : 15);
+      appState.nested.miniTgtAng = -appState.nested.mainAng + miniTilt;
 
       // Check main lever balance (exclude mini lever slots 97-103)
       let mainL = 0, mainR = 0;
