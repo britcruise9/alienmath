@@ -46,13 +46,25 @@ const LEVER_LEVELS: LeverLevel[] = [
   { inventory: [{w:2}, {w:2}, {w:1}, {w:1}] }
 ];
 
-const COLOR_LEVEL: LeverLevel = {
-  inventory: [
-    {w:2, c:C_ALERT},   // Red = weight 2
-    {w:1, c:C_MASTERY}, // Cyan = weight 1
-    {w:1, c:C_MASTERY}  // Cyan = weight 1
-  ]
-};
+const COLOR_LEVELS: LeverLevel[] = [
+  {
+    inventory: [
+      {w:2, c:C_ALERT},   // Red = weight 2
+      {w:1, c:C_MASTERY}, // Cyan = weight 1
+      {w:1, c:C_MASTERY}  // Cyan = weight 1
+    ]
+  },
+  {
+    inventory: [
+      {w:2, c:C_ALERT},   // Red = weight 2
+      {w:2, c:C_ALERT},   // Red = weight 2
+      {w:1, c:C_MASTERY}, // Cyan = weight 1
+      {w:1, c:C_MASTERY}, // Cyan = weight 1
+      {w:1, c:C_MASTERY}, // Cyan = weight 1
+      {w:1, c:C_MASTERY}  // Cyan = weight 1
+    ]
+  }
+];
 
 const NESTED_LEVEL: LeverLevel = {
   inventory: [
@@ -89,6 +101,7 @@ export default function GalacticGame() {
       winT: 0
     },
     colorBalance: {
+      levelIdx: 0,
       blocks: [] as Block[],
       drag: null as Block | null,
       bal: false,
@@ -390,23 +403,40 @@ export default function GalacticGame() {
     // ========== COLOR BALANCE ==========
     function startColorBalance() {
       appState.mode = MODE_COLOR_BALANCE;
+      appState.colorBalance.levelIdx = 0;
+      loadColorLevel(0);
+    }
+
+    function loadColorLevel(idx: number) {
+      if (idx >= COLOR_LEVELS.length) {
+        appState.mode = MODE_HUB;
+        setLevelIndicator("");
+        return;
+      }
+
+      appState.colorBalance.levelIdx = idx;
       appState.colorBalance.blocks = [];
       appState.colorBalance.bal = false;
       appState.colorBalance.ang = 0;
       appState.colorBalance.tgtAng = 0;
       appState.colorBalance.winT = 0;
 
-      COLOR_LEVEL.inventory.forEach((item, i) => {
+      const lvl = COLOR_LEVELS[idx];
+      let dots = "";
+      for(let i=0; i<=idx; i++) dots += "•";
+      for(let i=idx+1; i<COLOR_LEVELS.length; i++) dots += "◦";
+      setLevelIndicator(dots + " RED = 2x CYAN");
+
+      lvl.inventory.forEach((item, i) => {
         appState.colorBalance.blocks.push({
-          x: 100 + i * 80,
-          y: 380,
+          x: 100 + (i%6 * 80),
+          y: 380 + (Math.floor(i/6)*50),
           slot: null,
           w: item.w,
           c: item.c || C_SIGNAL,
           fixed: false
         });
       });
-      setLevelIndicator("RED = 2x CYAN");
       checkColorBalance();
     }
 
@@ -534,15 +564,24 @@ export default function GalacticGame() {
         }
       }
 
-      // Try mini lever (slot >= 100)
-      const MINI_X = 420, MINI_Y = 230, CELL = 30;
-      let dx = m.x - MINI_X, dy = m.y - MINI_Y;
-      let rad = -appState.nested.miniAng * Math.PI/180;
-      let lx = dx*Math.cos(rad) - dy*Math.sin(rad);
-      let ly = dx*Math.sin(rad) + dy*Math.cos(rad);
-      if (ly > 10 && ly < 50) { // reasonable range
-        const slot = Math.round(lx/CELL);
-        if (Math.abs(slot) <= 3 && slot !== 0 && Math.abs(lx - slot*CELL) < 20) {
+      const MAIN_X = 300, MAIN_Y = 280, MAIN_CELL = 40;
+      const MINI_CELL = 30, MINI_POS = 4;
+
+      // Calculate mini lever position in world space
+      const mainRad = appState.nested.mainAng * Math.PI/180;
+      const miniWorldX = MAIN_X + Math.cos(mainRad) * MINI_POS * MAIN_CELL;
+      const miniWorldY = MAIN_Y + Math.sin(mainRad) * MINI_POS * MAIN_CELL - 20;
+
+      // Try mini lever first (transformed by both main and mini rotation)
+      let dx = m.x - miniWorldX;
+      let dy = m.y - miniWorldY;
+      const totalRad = -(appState.nested.mainAng + appState.nested.miniAng) * Math.PI/180;
+      let lx = dx*Math.cos(totalRad) - dy*Math.sin(totalRad);
+      let ly = dx*Math.sin(totalRad) + dy*Math.cos(totalRad);
+
+      if (Math.abs(ly) < 30) {
+        const slot = Math.round(lx/MINI_CELL);
+        if (Math.abs(slot) <= 3 && slot !== 0 && Math.abs(lx - slot*MINI_CELL) < 20) {
           const inSlot = appState.nested.blocks.filter(b => b.slot === (100 + slot));
           if (inSlot.length > 0) {
             const top = inSlot[inSlot.length-1];
@@ -556,16 +595,15 @@ export default function GalacticGame() {
         }
       }
 
-      // Try main lever (slot < 100)
-      const MAIN_X = 300, MAIN_Y = 280;
+      // Try main lever
       dx = m.x - MAIN_X;
       dy = m.y - MAIN_Y;
-      rad = -appState.nested.mainAng * Math.PI/180;
+      const rad = -appState.nested.mainAng * Math.PI/180;
       lx = dx*Math.cos(rad) - dy*Math.sin(rad);
       ly = dx*Math.sin(rad) + dy*Math.cos(rad);
       if (ly > 10) return;
-      const slot = Math.round(lx/40);
-      if (Math.abs(slot) <= 5 && slot !== 0 && Math.abs(lx - slot*40) < 20) {
+      const slot = Math.round(lx/MAIN_CELL);
+      if (Math.abs(slot) <= 5 && slot !== 0 && Math.abs(lx - slot*MAIN_CELL) < 20) {
         const inSlot = appState.nested.blocks.filter(b => b.slot === slot);
         if (inSlot.length > 0) {
           const top = inSlot[inSlot.length-1];
@@ -582,48 +620,52 @@ export default function GalacticGame() {
       if (!appState.nested.drag) return;
       const b = appState.nested.drag;
 
-      // Try mini lever first (positioned at main lever's +4 position)
-      const MINI_X = 420, MINI_Y = 230, CELL = 30;
-      if (Math.abs(appState.mouse.y - MINI_Y) < 60) {
-        let bestS = 0, minD = Infinity;
-        for (let s = -3; s <= 3; s++) {
-          if (s === 0) continue;
-          const rad = appState.nested.miniAng * Math.PI/180;
-          const px = MINI_X + Math.cos(rad)*s*CELL;
-          const py = MINI_Y + Math.sin(rad)*s*CELL - 15;
-          const d = Math.hypot(px - appState.mouse.x, py - appState.mouse.y);
-          if (d < minD) { minD = d; bestS = s; }
-        }
-        if (minD < 40) {
-          appState.nested.blocks = appState.nested.blocks.filter(i => i !== b);
-          appState.nested.blocks.push(b);
-          b.slot = 100 + bestS;
-          appState.nested.drag = null;
-          checkNestedBalance();
-          return;
-        }
+      const MAIN_X = 300, MAIN_Y = 280, MAIN_CELL = 40;
+      const MINI_CELL = 30, MINI_POS = 4;
+
+      // Calculate mini lever world position
+      const mainRad = appState.nested.mainAng * Math.PI/180;
+      const miniWorldX = MAIN_X + Math.cos(mainRad) * MINI_POS * MAIN_CELL;
+      const miniWorldY = MAIN_Y + Math.sin(mainRad) * MINI_POS * MAIN_CELL - 20;
+
+      // Try mini lever slots
+      let bestS = 0, minD = Infinity;
+      for (let s = -3; s <= 3; s++) {
+        if (s === 0) continue;
+        const totalRad = (appState.nested.mainAng + appState.nested.miniAng) * Math.PI/180;
+        const px = miniWorldX + Math.cos(totalRad)*s*MINI_CELL;
+        const py = miniWorldY + Math.sin(totalRad)*s*MINI_CELL - 15;
+        const d = Math.hypot(px - appState.mouse.x, py - appState.mouse.y);
+        if (d < minD) { minD = d; bestS = s; }
       }
 
-      // Try main lever
-      const MAIN_X = 300, MAIN_Y = 280;
-      if (appState.mouse.y < 350) {
-        let bestS = 0, minD = Infinity;
-        for (let s = -5; s <= 5; s++) {
-          if (s === 0) continue;
-          const rad = appState.nested.mainAng * Math.PI/180;
-          const px = MAIN_X + Math.cos(rad)*s*40;
-          const py = MAIN_Y + Math.sin(rad)*s*40 - 25;
-          const d = Math.hypot(px - appState.mouse.x, py - appState.mouse.y);
-          if (d < minD) { minD = d; bestS = s; }
-        }
-        if (minD < 40) {
-          appState.nested.blocks = appState.nested.blocks.filter(i => i !== b);
-          appState.nested.blocks.push(b);
-          b.slot = bestS;
-          appState.nested.drag = null;
-          checkNestedBalance();
-          return;
-        }
+      if (minD < 40) {
+        appState.nested.blocks = appState.nested.blocks.filter(i => i !== b);
+        appState.nested.blocks.push(b);
+        b.slot = 100 + bestS;
+        appState.nested.drag = null;
+        checkNestedBalance();
+        return;
+      }
+
+      // Try main lever slots
+      minD = Infinity;
+      for (let s = -5; s <= 5; s++) {
+        if (s === 0) continue;
+        const rad = appState.nested.mainAng * Math.PI/180;
+        const px = MAIN_X + Math.cos(rad)*s*MAIN_CELL;
+        const py = MAIN_Y + Math.sin(rad)*s*MAIN_CELL - 25;
+        const d = Math.hypot(px - appState.mouse.x, py - appState.mouse.y);
+        if (d < minD) { minD = d; bestS = s; }
+      }
+
+      if (minD < 40) {
+        appState.nested.blocks = appState.nested.blocks.filter(i => i !== b);
+        appState.nested.blocks.push(b);
+        b.slot = bestS;
+        appState.nested.drag = null;
+        checkNestedBalance();
+        return;
       }
 
       // Return to inventory
@@ -716,8 +758,7 @@ export default function GalacticGame() {
     }
 
     function drawBlock(x: number, y: number, w: number, c: string) {
-      const h = 32; // Same size for all blocks
-      const wid = 32;
+      let h = w*40 - 8, wid = 32;
       ctx.shadowBlur = 15;
       ctx.shadowColor = c;
       ctx.strokeStyle = c;
@@ -727,6 +768,12 @@ export default function GalacticGame() {
       ctx.globalAlpha = 0.2;
       ctx.fillRect(x-wid/2, y-h/2, wid, h);
       ctx.globalAlpha = 1.0;
+      ctx.fillStyle = c;
+      if (w > 1) {
+        for (let i = 1; i < w; i++) {
+          ctx.fillRect(x-wid/2+4, y-h/2+i*40-1, wid-8, 2);
+        }
+      }
       ctx.fillRect(x-2, y-2, 4, 4);
       ctx.shadowBlur = 0;
     }
@@ -786,6 +833,21 @@ export default function GalacticGame() {
         }
       }
 
+      // Draw palette circles on left
+      const paletteX = 50;
+      const paletteY1 = 150;
+      const paletteY2 = 300;
+
+      ctx.fillStyle = C_MASTERY;
+      ctx.beginPath();
+      ctx.arc(paletteX, paletteY1, 20, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = C_ALERT;
+      ctx.beginPath();
+      ctx.arc(paletteX, paletteY2, 20, 0, Math.PI * 2);
+      ctx.fill();
+
       drawBackButton();
     }
 
@@ -843,14 +905,15 @@ export default function GalacticGame() {
         if (b.slot !== null && b !== appState.lever.drag) {
           let s = b.slot;
           if (!hMap[s]) hMap[s] = 0;
+          let h = b.w * CELL;
           const bx = s*CELL;
-          const by = -5 - hMap[s] - 16;
+          const by = -5 - hMap[s] - h/2;
           ctx.save();
           ctx.translate(bx, by);
           ctx.rotate(-appState.lever.ang * Math.PI/180);
           drawBlock(0, 0, b.w, b.c);
           ctx.restore();
-          hMap[s] += 32;
+          hMap[s] += h;
         }
       });
       ctx.restore();
@@ -881,7 +944,7 @@ export default function GalacticGame() {
       if (appState.colorBalance.bal && Math.abs(appState.colorBalance.ang) < 1) {
         appState.colorBalance.winT++;
         if (appState.colorBalance.winT > 60) {
-          setLevelIndicator("✓ BALANCED");
+          loadColorLevel(appState.colorBalance.levelIdx + 1);
         }
       } else {
         appState.colorBalance.winT = 0;
@@ -921,14 +984,15 @@ export default function GalacticGame() {
         if (b.slot !== null && b !== appState.colorBalance.drag) {
           let s = b.slot;
           if (!hMap[s]) hMap[s] = 0;
+          let h = b.w * CELL;
           const bx = s*CELL;
-          const by = -5 - hMap[s] - 16;
+          const by = -5 - hMap[s] - h/2;
           ctx.save();
           ctx.translate(bx, by);
           ctx.rotate(-appState.colorBalance.ang * Math.PI/180);
           drawBlock(0, 0, b.w, b.c);
           ctx.restore();
-          hMap[s] += 32;
+          hMap[s] += h;
         }
       });
       ctx.restore();
@@ -955,8 +1019,9 @@ export default function GalacticGame() {
       appState.nested.mainAng += (appState.nested.mainTgtAng - appState.nested.mainAng) * 0.1;
       appState.nested.miniAng += (appState.nested.miniTgtAng - appState.nested.miniAng) * 0.1;
 
-      const MAIN_X = 300, MAIN_Y = 280;
-      const MINI_X = 420, MINI_Y = 230;
+      const MAIN_X = 300, MAIN_Y = 280, MAIN_CELL = 40;
+      const MINI_CELL = 30;
+      const MINI_POS = 4; // Mini lever sits at +4 position on main lever
 
       // Draw main fulcrum
       ctx.fillStyle = C_DIM;
@@ -966,60 +1031,70 @@ export default function GalacticGame() {
       ctx.lineTo(MAIN_X + 15, MAIN_Y + 30);
       ctx.fill();
 
-      // Draw main lever
+      // Draw main lever (and everything on it)
       ctx.save();
       ctx.translate(MAIN_X, MAIN_Y);
       ctx.rotate(appState.nested.mainAng * Math.PI/180);
+
+      // Main lever bar
       ctx.fillStyle = C_DIM;
       ctx.fillRect(-210, -5, 420, 10);
 
+      // Main lever slots
       ctx.fillStyle = C_BG;
       for (let s = -5; s <= 5; s++) {
         if (s !== 0) {
           ctx.beginPath();
-          ctx.arc(s*40, 0, 2, 0, 6.28);
+          ctx.arc(s*MAIN_CELL, 0, 2, 0, 6.28);
           ctx.fill();
         }
       }
 
-      // Draw blocks on main lever
+      // Draw blocks on main lever (excluding mini lever position)
       let mainHMap: {[key: number]: number} = {};
       appState.nested.blocks.forEach(b => {
         if (b.slot !== null && b.slot < 100 && b !== appState.nested.drag) {
           let s = b.slot;
           if (!mainHMap[s]) mainHMap[s] = 0;
-          const bx = s*40;
-          const by = -5 - mainHMap[s] - 16;
+          let h = b.w * MAIN_CELL;
+          const bx = s*MAIN_CELL;
+          const by = -5 - mainHMap[s] - h/2;
           ctx.save();
           ctx.translate(bx, by);
           ctx.rotate(-appState.nested.mainAng * Math.PI/180);
           drawBlock(0, 0, b.w, b.c);
           ctx.restore();
-          mainHMap[s] += 32;
+          mainHMap[s] += h;
         }
       });
-      ctx.restore();
 
-      // Draw mini fulcrum (sitting on main lever at +4 position)
+      // Now draw mini lever sitting ON the main lever at position +4
+      // Mini lever fulcrum sits ON the main lever surface at slot +4
+      ctx.save();
+      ctx.translate(MINI_POS * MAIN_CELL, -5); // Position at slot +4, on top of lever
+
+      // Mini fulcrum (small triangle)
       ctx.fillStyle = C_DIM;
       ctx.beginPath();
-      ctx.moveTo(MINI_X, MINI_Y);
-      ctx.lineTo(MINI_X - 10, MINI_Y + 20);
-      ctx.lineTo(MINI_X + 10, MINI_Y + 20);
+      ctx.moveTo(0, 0);
+      ctx.lineTo(-8, -15);
+      ctx.lineTo(8, -15);
       ctx.fill();
 
-      // Draw mini lever
-      ctx.save();
-      ctx.translate(MINI_X, MINI_Y);
+      // Mini lever rotates around its own center
+      ctx.translate(0, -15);
       ctx.rotate(appState.nested.miniAng * Math.PI/180);
+
+      // Mini lever bar
       ctx.fillStyle = C_DIM;
       ctx.fillRect(-100, -3, 200, 6);
 
+      // Mini lever slots
       ctx.fillStyle = C_BG;
       for (let s = -3; s <= 3; s++) {
         if (s !== 0) {
           ctx.beginPath();
-          ctx.arc(s*30, 0, 2, 0, 6.28);
+          ctx.arc(s*MINI_CELL, 0, 2, 0, 6.28);
           ctx.fill();
         }
       }
@@ -1030,17 +1105,20 @@ export default function GalacticGame() {
         if (b.slot !== null && b.slot >= 100 && b !== appState.nested.drag) {
           let localSlot = b.slot - 100;
           if (!miniHMap[localSlot]) miniHMap[localSlot] = 0;
-          const bx = localSlot*30;
-          const by = -3 - miniHMap[localSlot] - 16;
+          let h = b.w * MINI_CELL;
+          const bx = localSlot*MINI_CELL;
+          const by = -3 - miniHMap[localSlot] - h/2;
           ctx.save();
           ctx.translate(bx, by);
-          ctx.rotate(-appState.nested.miniAng * Math.PI/180);
+          ctx.rotate(-appState.nested.miniAng - appState.nested.mainAng * Math.PI/180);
           drawBlock(0, 0, b.w, b.c);
           ctx.restore();
-          miniHMap[localSlot] += 32;
+          miniHMap[localSlot] += h;
         }
       });
-      ctx.restore();
+
+      ctx.restore(); // End mini lever
+      ctx.restore(); // End main lever
 
       // Draw blocks in inventory
       appState.nested.blocks.forEach(b => {
