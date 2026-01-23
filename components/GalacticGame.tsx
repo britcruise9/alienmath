@@ -699,26 +699,27 @@ export default function GalacticGame() {
         }
       });
 
-      // Always update mini lever angle based on current state
+      // Mini lever tilts based on its own balance (gravity is absolute, not relative to main lever)
       appState.nested.miniTgtAng = miniL === miniR ? 0 : (miniL > miniR ? -15 : 15);
 
-      // Check main lever balance
+      // Check main lever balance (exclude mini lever slots 97-103)
       let mainL = 0, mainR = 0;
       appState.nested.blocks.forEach(b => {
-        if (b.slot !== null && b.slot < 100) {
+        if (b.slot !== null && b.slot < 97) {
+          // Only slots below 97 count on main lever
           const t = Math.abs(b.slot) * b.w;
           b.slot < 0 ? mainL += t : mainR += t;
         }
       });
 
-      // Add mini lever weight to main lever right side (mini sits at +4 position)
+      // Add mini lever total weight as point mass at position +4 on right side
       const miniTotalWeight = miniL + miniR;
       mainR += miniTotalWeight * 4;
 
-      // Always update main lever angle based on current state
+      // Main lever tilts based on its balance
       appState.nested.mainTgtAng = mainL === mainR ? 0 : (mainL > mainR ? -15 : 15);
 
-      // Win condition - all blocks must be placed
+      // Win condition - all blocks must be placed and both levers balanced
       const allPlaced = appState.nested.blocks.every(b => b.slot !== null);
       if (allPlaced && miniL === miniR && mainL === mainR && miniTotalWeight > 0) {
         appState.nested.winT++;
@@ -1114,6 +1115,8 @@ export default function GalacticGame() {
           const by = -3 - miniHMap[localSlot] - h/2;
           ctx.save();
           ctx.translate(bx, by);
+          // Blocks stay upright relative to gravity, not the lever
+          // Need to counter-rotate by BOTH main and mini angles to stay vertical
           ctx.rotate(-(appState.nested.miniAng + appState.nested.mainAng) * Math.PI/180);
           drawBlock(0, 0, b.w, b.c);
           ctx.restore();
