@@ -769,12 +769,16 @@ export default function GalacticGame() {
           // Only slots below 97 count on main lever
           const t = Math.abs(b.slot) * b.w;
           b.slot < 0 ? mainL += t : mainR += t;
+          console.log(`Main lever block: slot=${b.slot}, weight=${b.w}, torque=${t}, side=${b.slot < 0 ? 'LEFT' : 'RIGHT'}`);
         }
       });
 
       // Add mini lever total weight as point mass at position +4 on right side
       const miniTotalWeight = miniL + miniR;
+      console.log(`Mini lever: L=${miniL}, R=${miniR}, total weight=${miniTotalWeight}`);
+      console.log(`Before mini lever: mainL=${mainL}, mainR=${mainR}`);
       mainR += miniTotalWeight * 4;
+      console.log(`After mini lever: mainL=${mainL}, mainR=${mainR}, balanced=${mainL === mainR}`);
 
       // Main lever tilts based on its balance
       appState.nested.mainTgtAng = mainL === mainR ? 0 : (mainL > mainR ? -15 : 15);
