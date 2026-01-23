@@ -13,11 +13,12 @@ const C_ALERT = "#ff3300";
 
 const MODE_BOOT = 0;
 const MODE_HUB = 1;
-const MODE_GAME_LEVER = 2;
-const MODE_GAME_BLOB = 3;
-const MODE_GAME_SPACE = 4;
-const MODE_GAME_CHANGE = 5;
-const MODE_GAME_UNCERTAIN = 6;
+const MODE_GAME_PATTERN = 2;
+const MODE_GAME_LEVER = 3;
+const MODE_GAME_BLOB = 4;
+const MODE_GAME_SPACE = 5;
+const MODE_GAME_CHANGE = 6;
+const MODE_GAME_UNCERTAIN = 7;
 
 interface Node {
   id: number;
@@ -50,17 +51,28 @@ interface Blob {
   isPrime: boolean;
 }
 
+interface PatternLevel {
+  sequence: string[]; // Colors: 'A' and 'B' (cyan and magenta)
+  numBlanks: number;
+}
+
 interface LeverLevel {
   id: number;
   targets: any[];
   inventory: { w: number }[];
 }
 
+const PATTERN_LEVELS: PatternLevel[] = [
+  { sequence: ['A', 'B', 'A', 'B', 'A', 'B'], numBlanks: 2 }, // ABABAB__
+  { sequence: ['A', 'A', 'B', 'A', 'A', 'B'], numBlanks: 2 }, // AABAAB__
+  { sequence: ['A', 'B', 'B', 'A', 'B', 'B'], numBlanks: 2 }  // ABBABB__
+];
+
 const LEVER_LEVELS: LeverLevel[] = [
   { id: 1, targets: [], inventory: [{w:1}, {w:1}] },
   { id: 2, targets: [], inventory: [{w:1}, {w:2}] },
   { id: 3, targets: [], inventory: [{w:2}, {w:2}, {w:1}, {w:1}] },
-  { id: 4, targets: [], inventory: [{w:2}, {w:2}, {w:1}, {w:1}, {w:1}, {w:1}] }
+  { id: 4, targets: [], inventory: [{w:1}, {w:1}, {w:2}, {w:2}] } // Multi-lever system
 ];
 
 export default function GalacticGame() {
@@ -79,6 +91,13 @@ export default function GalacticGame() {
       { id: 4, x: 380, y: 225, r: 25, label: "CHANGE", complete: false, blink: 0 },
       { id: 5, x: 460, y: 225, r: 25, label: "UNCERTAINTY", complete: false, blink: 0 }
     ] as Node[],
+    pattern: {
+      levelIdx: 0,
+      sequence: [] as string[],
+      userAnswer: [] as string[],
+      numBlanks: 0,
+      palette: [] as string[]
+    },
     lever: {
       levelIdx: 0,
       blocks: [] as Block[],
@@ -86,7 +105,9 @@ export default function GalacticGame() {
       bal: false,
       ang: 0,
       tgtAng: 0,
-      winT: 0
+      winT: 0,
+      multiLever: false, // For system of equations mode
+      levers: [] as {x: number, y: number, ang: number, tgtAng: number, blocks: Block[]}[]
     },
     blob: {
       blobs: [] as Blob[],
@@ -162,9 +183,9 @@ export default function GalacticGame() {
     // Game logic functions
     function handleInputDown() {
       // Check for back button in game modes
-      if (appState.mode === MODE_GAME_LEVER || appState.mode === MODE_GAME_BLOB ||
-          appState.mode === MODE_GAME_CHANGE || appState.mode === MODE_GAME_UNCERTAIN ||
-          appState.mode === MODE_GAME_SPACE) {
+      if (appState.mode === MODE_GAME_PATTERN || appState.mode === MODE_GAME_LEVER ||
+          appState.mode === MODE_GAME_BLOB || appState.mode === MODE_GAME_CHANGE ||
+          appState.mode === MODE_GAME_UNCERTAIN || appState.mode === MODE_GAME_SPACE) {
         const m = appState.mouse;
         if (m.x < 80 && m.y < 40) {
           returnToHub();
@@ -173,6 +194,7 @@ export default function GalacticGame() {
       }
 
       if (appState.mode === MODE_HUB) handleHubClick();
+      else if (appState.mode === MODE_GAME_PATTERN) handlePatternClick();
       else if (appState.mode === MODE_GAME_LEVER) handleLeverDown();
       else if (appState.mode === MODE_GAME_BLOB) handleBlobDown();
       else if (appState.mode === MODE_GAME_CHANGE) handleChangeClick();
@@ -199,7 +221,7 @@ export default function GalacticGame() {
           if (n.complete) {
             n.blink = 20;
           } else if (i === 0) {
-            startLeverGame();
+            startPatternGame();
           } else if (i === 1) {
             startBlobGame();
           } else if (i === 2) {
@@ -213,6 +235,90 @@ export default function GalacticGame() {
           }
         }
       });
+    }
+
+    // Pattern Game Functions
+    function startPatternGame() {
+      appState.mode = MODE_GAME_PATTERN;
+      appState.pattern.levelIdx = 0;
+      loadPatternLevel(0);
+    }
+
+    function loadPatternLevel(idx: number) {
+      if (idx >= PATTERN_LEVELS.length) {
+        // Pattern levels complete, start lever game
+        startLeverGame();
+        return;
+      }
+
+      const level = PATTERN_LEVELS[idx];
+      appState.pattern.levelIdx = idx;
+      appState.pattern.sequence = [...level.sequence];
+      appState.pattern.numBlanks = level.numBlanks;
+      appState.pattern.userAnswer = [];
+      appState.pattern.palette = ['A', 'B'];
+
+      let dots = "";
+      for(let i=0; i<=idx; i++) dots += "•";
+      for(let i=idx+1; i<PATTERN_LEVELS.length; i++) dots += "◦";
+      setLevelIndicator(dots);
+    }
+
+    function handlePatternClick() {
+      const m = appState.mouse;
+      const cellSize = 60;
+      const startX = 100;
+      const seqY = 225;
+
+      // Check if clicking on blank cells
+      const totalCells = appState.pattern.sequence.length + appState.pattern.numBlanks;
+      for (let i = 0; i < appState.pattern.numBlanks; i++) {
+        const cellIdx = appState.pattern.sequence.length + i;
+        const cx = startX + cellIdx * cellSize;
+        if (Math.abs(m.x - cx) < cellSize/2 && Math.abs(m.y - seqY) < cellSize/2) {
+          // Clicking on a blank - cycle through palette
+          if (!appState.pattern.userAnswer[i]) {
+            appState.pattern.userAnswer[i] = 'A';
+          } else if (appState.pattern.userAnswer[i] === 'A') {
+            appState.pattern.userAnswer[i] = 'B';
+          } else {
+            appState.pattern.userAnswer[i] = '';
+          }
+          checkPatternAnswer();
+          return;
+        }
+      }
+    }
+
+    function checkPatternAnswer() {
+      if (appState.pattern.userAnswer.filter(a => a).length < appState.pattern.numBlanks) {
+        return; // Not all filled
+      }
+
+      // Get expected continuation
+      const fullSeq = [...appState.pattern.sequence];
+      const seqLen = appState.pattern.sequence.length;
+
+      // Determine pattern length (2 or 3)
+      let patternLen = 2;
+      if (appState.pattern.sequence[0] === appState.pattern.sequence[1]) {
+        patternLen = 3;
+      }
+
+      // Generate expected answer
+      const expected: string[] = [];
+      for (let i = 0; i < appState.pattern.numBlanks; i++) {
+        expected.push(appState.pattern.sequence[(seqLen + i) % patternLen]);
+      }
+
+      // Check if correct
+      const correct = appState.pattern.userAnswer.every((ans, i) => ans === expected[i]);
+
+      if (correct) {
+        setTimeout(() => {
+          loadPatternLevel(appState.pattern.levelIdx + 1);
+        }, 500);
+      }
     }
 
     function startLeverGame() {
@@ -240,7 +346,20 @@ export default function GalacticGame() {
       let dots = "";
       for(let i=0; i<=idx; i++) dots += "•";
       for(let i=idx+1; i<LEVER_LEVELS.length; i++) dots += "◦";
-      setLevelIndicator(dots);
+      setLevelIndicator(dots + " SYSTEM");
+
+      // Check if this is the multi-lever level
+      if (idx === 3) {
+        appState.lever.multiLever = true;
+        appState.lever.levers = [
+          { x: 300, y: 350, ang: 0, tgtAng: 0, blocks: [] }, // Bottom
+          { x: 300, y: 250, ang: 0, tgtAng: 0, blocks: [] }, // Middle
+          { x: 300, y: 150, ang: 0, tgtAng: 0, blocks: [] }  // Top
+        ];
+      } else {
+        appState.lever.multiLever = false;
+        appState.lever.levers = [];
+      }
 
       lvl.inventory.forEach((item, i) => {
         appState.lever.blocks.push({
@@ -816,6 +935,65 @@ export default function GalacticGame() {
       ctx.shadowBlur = 0;
     }
 
+    function drawPatternGame() {
+      const cellSize = 60;
+      const startX = 100;
+      const seqY = 225;
+
+      // Draw sequence
+      appState.pattern.sequence.forEach((color, i) => {
+        const cx = startX + i * cellSize;
+        const fillColor = color === 'A' ? C_MASTERY : C_ALERT;
+
+        ctx.strokeStyle = fillColor;
+        ctx.fillStyle = fillColor;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(cx - cellSize/2 + 5, seqY - cellSize/2 + 5, cellSize - 10, cellSize - 10);
+        ctx.globalAlpha = 0.5;
+        ctx.fillRect(cx - cellSize/2 + 5, seqY - cellSize/2 + 5, cellSize - 10, cellSize - 10);
+        ctx.globalAlpha = 1.0;
+      });
+
+      // Draw blanks
+      for (let i = 0; i < appState.pattern.numBlanks; i++) {
+        const cellIdx = appState.pattern.sequence.length + i;
+        const cx = startX + cellIdx * cellSize;
+
+        const userAns = appState.pattern.userAnswer[i];
+        if (userAns) {
+          const fillColor = userAns === 'A' ? C_MASTERY : C_ALERT;
+          ctx.strokeStyle = fillColor;
+          ctx.fillStyle = fillColor;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(cx - cellSize/2 + 5, seqY - cellSize/2 + 5, cellSize - 10, cellSize - 10);
+          ctx.globalAlpha = 0.5;
+          ctx.fillRect(cx - cellSize/2 + 5, seqY - cellSize/2 + 5, cellSize - 10, cellSize - 10);
+          ctx.globalAlpha = 1.0;
+        } else {
+          ctx.strokeStyle = C_DIM;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(cx - cellSize/2 + 5, seqY - cellSize/2 + 5, cellSize - 10, cellSize - 10);
+        }
+      }
+
+      // Draw palette circles on left
+      const paletteX = 50;
+      const paletteY1 = 150;
+      const paletteY2 = 300;
+
+      ctx.fillStyle = C_MASTERY;
+      ctx.beginPath();
+      ctx.arc(paletteX, paletteY1, 20, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = C_ALERT;
+      ctx.beginPath();
+      ctx.arc(paletteX, paletteY2, 20, 0, Math.PI * 2);
+      ctx.fill();
+
+      drawBackButton();
+    }
+
     function drawLeverGame() {
       if (appState.lever.drag) {
         appState.lever.drag.x = appState.mouse.x;
@@ -1285,6 +1463,8 @@ export default function GalacticGame() {
         drawBootSequence();
       } else if (appState.mode === MODE_HUB) {
         drawHub();
+      } else if (appState.mode === MODE_GAME_PATTERN) {
+        drawPatternGame();
       } else if (appState.mode === MODE_GAME_LEVER) {
         drawLeverGame();
       } else if (appState.mode === MODE_GAME_BLOB) {
