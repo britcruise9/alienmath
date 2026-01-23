@@ -749,12 +749,13 @@ export default function GalacticGame() {
 
     function checkNestedBalance() {
       // Check mini lever balance (slots 97-99 left, 101-103 right)
-      let miniL = 0, miniR = 0;
+      let miniL = 0, miniR = 0, miniTotalWeight = 0;
       appState.nested.blocks.forEach(b => {
         if (b.slot !== null && b.slot >= 97 && b.slot <= 103 && b.slot !== 100) {
           const localSlot = b.slot - 100;
           const t = Math.abs(localSlot) * b.w;
           localSlot < 0 ? miniL += t : miniR += t;
+          miniTotalWeight += b.w; // Sum the weights, not the torques!
         }
       });
 
@@ -774,7 +775,6 @@ export default function GalacticGame() {
       });
 
       // Add mini lever total weight as point mass at position +4 on right side
-      const miniTotalWeight = miniL + miniR;
       console.log(`Mini lever: L=${miniL}, R=${miniR}, total weight=${miniTotalWeight}`);
       console.log(`Before mini lever: mainL=${mainL}, mainR=${mainR}`);
       mainR += miniTotalWeight * 4;
