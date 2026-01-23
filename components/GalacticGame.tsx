@@ -347,7 +347,7 @@ export default function GalacticGame() {
       const rad = -appState.lever.ang * Math.PI/180;
       const lx = dx*Math.cos(rad) - dy*Math.sin(rad);
       const ly = dx*Math.sin(rad) + dy*Math.cos(rad);
-      if (ly > 10) return;
+      if (ly > 150) return; // Allow clicking on tall stacks (increased from 10)
       const slot = Math.round(lx/CELL);
       if (Math.abs(slot) <= 5 && slot !== 0 && Math.abs(lx - slot*CELL) < 20) {
         const inSlot = appState.lever.blocks.filter(b => b.slot === slot);
@@ -479,7 +479,7 @@ export default function GalacticGame() {
       const rad = -appState.colorBalance.ang * Math.PI/180;
       const lx = dx*Math.cos(rad) - dy*Math.sin(rad);
       const ly = dx*Math.sin(rad) + dy*Math.cos(rad);
-      if (ly > 10) return;
+      if (ly > 150) return; // Allow clicking on tall stacks
       const slot = Math.round(lx/CELL);
       if (Math.abs(slot) <= 5 && slot !== 0 && Math.abs(lx - slot*CELL) < 20) {
         const inSlot = appState.colorBalance.blocks.filter(b => b.slot === slot);
@@ -628,7 +628,7 @@ export default function GalacticGame() {
       const rad = -appState.nested.mainAng * Math.PI/180;
       lx = dx*Math.cos(rad) - dy*Math.sin(rad);
       ly = dx*Math.sin(rad) + dy*Math.cos(rad);
-      if (ly > 10) return;
+      if (ly > 150) return; // Allow clicking on tall stacks
       const slot = Math.round(lx/MAIN_CELL);
       if (Math.abs(slot) <= 5 && slot !== 0 && Math.abs(lx - slot*MAIN_CELL) < 20) {
         const inSlot = appState.nested.blocks.filter(b => b.slot === slot);
