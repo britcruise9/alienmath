@@ -1114,7 +1114,7 @@ export default function GalacticGame() {
           const by = -3 - miniHMap[localSlot] - h/2;
           ctx.save();
           ctx.translate(bx, by);
-          ctx.rotate(-appState.nested.miniAng - appState.nested.mainAng * Math.PI/180);
+          ctx.rotate(-(appState.nested.miniAng + appState.nested.mainAng) * Math.PI/180);
           drawBlock(0, 0, b.w, b.c);
           ctx.restore();
           miniHMap[localSlot] += h;
