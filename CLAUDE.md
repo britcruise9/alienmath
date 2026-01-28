@@ -76,10 +76,8 @@ Each tests a distinct cognitive prior (based on ARC-AGI / Chollet's core knowled
 
 ## Aesthetic Direction
 
-**"Green Phosphor Terminal" / CRT Simulation**
+**"Green Phosphor Terminal" / CRT Simulation / MINIMAL**
 
-- Scanlines and chromatic aberration
-- Ghosting trails for moving objects (motion history)
 - Black background, glowing green/white wireframes
 - Reference: ARC-AGI abstractions, Euclidea geometry, Osmos blobs
 
