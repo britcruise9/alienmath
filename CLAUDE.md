@@ -30,38 +30,26 @@ Pattern Game → Simple Balance → Color Balance → Nested Balance → [more m
 
 ## The 5 Math Muscles
 
-Each tests a distinct cognitive prior (based on ARC-AGI / Chollet's core knowledge priors):
+Each tests a distinct cognitive prior (based on ARC-AGI / Chollet's core knowledge priors).
 
-### I. SPACE (Geometry & Topology)
-- **Concept**: Dimensionality, how space bounds/connects
-- **Mechanics**: 
-  - Triangulation: Drag 2D net nodes until it "pops" into 3D wireframe
-  - Packing: Fit irregular artifacts into container (density/efficiency)
+> **Note:** Mechanics for muscles II-V are still being brainstormed. Update as we iterate.
 
-### II. QUANTITY (Arithmetic & Number Theory)
-- **Concept**: "Atomic Theory of Numbers" — Primes vs Composites
-- **Mechanic**: The Sharing Game (splitting energy blobs)
-  - Composite blobs: Fluid, soft, split easily
-  - Prime blobs: Crystalline, jagged, resist splitting with haptic feedback
-
-### III. STRUCTURE (Algebra & Logic)
+### I. STRUCTURE (Algebra & Logic) ✅ IMPLEMENTED
 - **Concept**: Equals sign (=) as physical balance/equilibrium
-- **Mechanics**:
-  - The Scale: Add weights to restore horizontal balance
-  - Graph Coloring: Connected nodes can't share same color (constraint satisfaction)
+- **Mechanics**: The Scale — drag weights to restore horizontal balance
+- **Status**: 4 levels live (Pattern → Simple Balance → Color Balance → Nested Balance)
 
-### IV. CHANGE (Calculus & Analysis)
+### II. QUANTITY (Arithmetic & Number Theory) — TBD
+- **Concept**: Primes vs Composites, divisibility
+
+### III. SPACE (Geometry & Topology) — TBD
+- **Concept**: Dimensionality, how space bounds/connects
+
+### IV. CHANGE (Calculus & Analysis) — TBD
 - **Concept**: Rate of change, accumulation, prediction
-- **Mechanic**: Trajectory/Time Scrubbing
-  - Launch probe through gravity fields
-  - Scrub time to see path divergence
-  - Adjust velocity vector, visualized via "green phosphor" ghost trails
 
-### V. UNCERTAINTY (Probability & Information)
-- **Concept**: Bayesian inference—trusting patterns in incomplete data
-- **Mechanic**: The Wager
-  - Signal hidden in noise, spend "energy" to clear pixels
-  - Bet early (high risk/reward) vs spend energy for certainty (lower score)
+### V. UNCERTAINTY (Probability & Information) — TBD
+- **Concept**: Patterns in incomplete data
 
 ---
 
