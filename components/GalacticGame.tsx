@@ -207,11 +207,9 @@ export default function GalacticGame() {
       for (let i = 0; i < dots.length; i++) {
         const dot = dots[i];
         if (Math.hypot(m.x - dot.x, m.y - dotY) < 15) {
-          // Can only go back to completed steps or current step
-          if (dot.completed || dot.mode === appState.mode) {
-            dot.start();
-            return;
-          }
+          // Allow clicking any dot for testing/navigation
+          dot.start();
+          return;
         }
       }
 
