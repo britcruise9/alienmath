@@ -15,6 +15,7 @@ const MODE_PATTERN = 1;
 const MODE_SIMPLE_BALANCE = 2;
 const MODE_COLOR_BALANCE = 3;
 const MODE_NESTED_BALANCE = 4;
+const MODE_DRAIN_RACE = 5;
 
 interface Block {
   x: number;
@@ -72,6 +73,20 @@ const NESTED_LEVEL: LeverLevel = {
   ]
 };
 
+// Drain Race levels: h1 = ▽ height, h2 = △ height
+// Crossover happens when heights are equal during drain
+interface DrainRaceLevel {
+  h1: number;  // ▽ (point down) vessel height
+  h2: number;  // △ (point up) vessel height
+  duration: number; // drain time in frames (60fps)
+}
+
+const DRAIN_RACE_LEVELS: DrainRaceLevel[] = [
+  { h1: 100, h2: 200, duration: 300 },  // 5 seconds, crossover ~36% through
+  { h1: 140, h2: 200, duration: 360 },  // 6 seconds, crossover earlier
+  { h1: 160, h2: 200, duration: 420 },  // 7 seconds, very subtle crossover
+];
+
 export default function GalacticGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [levelIndicator, setLevelIndicator] = useState("");
@@ -83,7 +98,8 @@ export default function GalacticGame() {
       pattern: false,
       simple: false,
       color: false,
-      nested: false
+      nested: false,
+      drainRace: false
     },
     pattern: {
       levelIdx: 0,
@@ -117,6 +133,17 @@ export default function GalacticGame() {
       miniSmoothTilt: 0,
       blocks: [] as Block[],
       drag: null as Block | null,
+      winT: 0
+    },
+    drainRace: {
+      levelIdx: 0,
+      time: 0,           // current frame in animation
+      running: false,    // is animation playing
+      tapped: false,     // has user tapped
+      tapTime: -1,       // frame when user tapped
+      crossTime: 0,      // frame when levels actually cross
+      showResult: false, // showing result feedback
+      resultTimer: 0,    // countdown for result display
       winT: 0
     }
   });
@@ -170,20 +197,19 @@ export default function GalacticGame() {
       const m = appState.mouse;
       const dotY = 20;
       const dots = [
-        { x: 150, completed: appState.completed.pattern, mode: MODE_PATTERN, start: startPatternGame },
-        { x: 250, completed: appState.completed.simple, mode: MODE_SIMPLE_BALANCE, start: startSimpleBalance },
-        { x: 350, completed: appState.completed.color, mode: MODE_COLOR_BALANCE, start: startColorBalance },
-        { x: 450, completed: appState.completed.nested, mode: MODE_NESTED_BALANCE, start: startNestedBalance }
+        { x: 120, completed: appState.completed.pattern, mode: MODE_PATTERN, start: startPatternGame },
+        { x: 210, completed: appState.completed.simple, mode: MODE_SIMPLE_BALANCE, start: startSimpleBalance },
+        { x: 300, completed: appState.completed.color, mode: MODE_COLOR_BALANCE, start: startColorBalance },
+        { x: 390, completed: appState.completed.nested, mode: MODE_NESTED_BALANCE, start: startNestedBalance },
+        { x: 480, completed: appState.completed.drainRace, mode: MODE_DRAIN_RACE, start: startDrainRace }
       ];
 
       for (let i = 0; i < dots.length; i++) {
         const dot = dots[i];
         if (Math.hypot(m.x - dot.x, m.y - dotY) < 15) {
-          // Can only go back to completed steps or current step
-          if (dot.completed || dot.mode === appState.mode) {
-            dot.start();
-            return;
-          }
+          // Allow clicking any dot for testing/navigation
+          dot.start();
+          return;
         }
       }
 
@@ -191,6 +217,7 @@ export default function GalacticGame() {
       else if (appState.mode === MODE_SIMPLE_BALANCE) handleLeverDown();
       else if (appState.mode === MODE_COLOR_BALANCE) handleColorDown();
       else if (appState.mode === MODE_NESTED_BALANCE) handleNestedDown();
+      else if (appState.mode === MODE_DRAIN_RACE) handleDrainRaceDown();
     }
 
     function handleInputUp() {
@@ -785,11 +812,83 @@ export default function GalacticGame() {
         appState.nested.winT++;
         if (appState.nested.winT > 30) {
           appState.completed.nested = true;
-          setLevelIndicator("✓ ALL COMPLETE");
+          startDrainRace();  // Auto-advance to drain race
         }
       } else {
         appState.nested.winT = 0;
       }
+    }
+
+    // ========== DRAIN RACE ==========
+    function startDrainRace() {
+      appState.mode = MODE_DRAIN_RACE;
+      appState.drainRace.levelIdx = 0;
+      loadDrainRaceLevel(0);
+    }
+
+    function loadDrainRaceLevel(idx: number) {
+      if (idx >= DRAIN_RACE_LEVELS.length) {
+        appState.completed.drainRace = true;
+        setLevelIndicator("✓ CHANGE COMPLETE");
+        return;
+      }
+
+      const level = DRAIN_RACE_LEVELS[idx];
+      appState.drainRace.levelIdx = idx;
+      appState.drainRace.time = 0;
+      appState.drainRace.running = true;
+      appState.drainRace.tapped = false;
+      appState.drainRace.tapTime = -1;
+      appState.drainRace.showResult = false;
+      appState.drainRace.resultTimer = 0;
+      appState.drainRace.winT = 0;
+
+      // Calculate crossover time
+      // ▽: h1(t) = H1 * sqrt(1 - t/T)
+      // △: h2(t) = H2 * (1 - sqrt(t/T))
+      // Cross when: H1 * sqrt(1-t/T) = H2 * (1 - sqrt(t/T))
+      // Let u = sqrt(t/T), r = H1/H2
+      // r * sqrt(1-u²) = 1-u
+      // Solving: u = (1 - r²) / (1 + r²)
+      const r = level.h1 / level.h2;
+      const u = (1 - r*r) / (1 + r*r);
+      appState.drainRace.crossTime = level.duration * u * u;
+
+      let dots = "";
+      for(let i=0; i<=idx; i++) dots += "•";
+      for(let i=idx+1; i<DRAIN_RACE_LEVELS.length; i++) dots += "◦";
+      setLevelIndicator(dots + " TAP WHEN EQUAL");
+    }
+
+    function handleDrainRaceDown() {
+      const dr = appState.drainRace;
+
+      // If showing result, tap to continue
+      if (dr.showResult) {
+        if (dr.winT > 0) {
+          // Won - advance to next level
+          loadDrainRaceLevel(dr.levelIdx + 1);
+        } else {
+          // Lost - retry same level
+          loadDrainRaceLevel(dr.levelIdx);
+        }
+        return;
+      }
+
+      // If running and not yet tapped, register tap
+      if (dr.running && !dr.tapped) {
+        dr.tapped = true;
+        dr.tapTime = dr.time;
+      }
+    }
+
+    function getWaterLevels(time: number, level: DrainRaceLevel) {
+      const t = Math.min(time / level.duration, 1);
+      // ▽ (point down): starts lower, drains slow then fast
+      const h1 = level.h1 * Math.sqrt(Math.max(0, 1 - t));
+      // △ (point up): starts higher, drains fast then slow
+      const h2 = level.h2 * (1 - Math.sqrt(t));
+      return { h1, h2 };
     }
 
     // ========== DRAWING ==========
@@ -811,10 +910,11 @@ export default function GalacticGame() {
     function drawCompletionDots() {
       const dotY = 20;
       const dots = [
-        { x: 150, completed: appState.completed.pattern, current: appState.mode === MODE_PATTERN },
-        { x: 250, completed: appState.completed.simple, current: appState.mode === MODE_SIMPLE_BALANCE },
-        { x: 350, completed: appState.completed.color, current: appState.mode === MODE_COLOR_BALANCE },
-        { x: 450, completed: appState.completed.nested, current: appState.mode === MODE_NESTED_BALANCE }
+        { x: 120, completed: appState.completed.pattern, current: appState.mode === MODE_PATTERN },
+        { x: 210, completed: appState.completed.simple, current: appState.mode === MODE_SIMPLE_BALANCE },
+        { x: 300, completed: appState.completed.color, current: appState.mode === MODE_COLOR_BALANCE },
+        { x: 390, completed: appState.completed.nested, current: appState.mode === MODE_NESTED_BALANCE },
+        { x: 480, completed: appState.completed.drainRace, current: appState.mode === MODE_DRAIN_RACE }
       ];
 
       dots.forEach(dot => {
@@ -1217,6 +1317,195 @@ export default function GalacticGame() {
       }
     }
 
+    function drawDrainRace() {
+      const dr = appState.drainRace;
+      const level = DRAIN_RACE_LEVELS[dr.levelIdx];
+      if (!level) return;
+
+      // Update animation
+      if (dr.running && !dr.showResult) {
+        dr.time++;
+
+        // Check if tapped
+        if (dr.tapped && !dr.showResult) {
+          dr.showResult = true;
+          dr.running = false;
+
+          // Check accuracy - within 20 frames (0.33 sec) is a win
+          const accuracy = Math.abs(dr.tapTime - dr.crossTime);
+          if (accuracy < 20) {
+            dr.winT = 1;
+          }
+        }
+
+        // If animation complete without tap, show failure
+        if (dr.time >= level.duration && !dr.tapped) {
+          dr.showResult = true;
+          dr.running = false;
+          dr.winT = 0;
+        }
+      }
+
+      // Result display timer
+      if (dr.showResult) {
+        dr.resultTimer++;
+      }
+
+      const { h1, h2 } = getWaterLevels(dr.time, level);
+
+      // Vessel positions
+      const V1_X = 180;  // ▽ center
+      const V2_X = 420;  // △ center
+      const BASE_Y = 380; // bottom of vessels
+      const MAX_WIDTH = 100;
+
+      // Draw ▽ (point down) vessel - left side
+      const v1Height = level.h1;
+      const v1TopWidth = MAX_WIDTH;
+
+      ctx.strokeStyle = C_SIGNAL;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      // Left edge
+      ctx.moveTo(V1_X - v1TopWidth/2, BASE_Y - v1Height);
+      ctx.lineTo(V1_X, BASE_Y);
+      // Right edge
+      ctx.lineTo(V1_X + v1TopWidth/2, BASE_Y - v1Height);
+      // Top edge
+      ctx.lineTo(V1_X - v1TopWidth/2, BASE_Y - v1Height);
+      ctx.stroke();
+
+      // Water in ▽ - width at height h is proportional to h
+      if (h1 > 0) {
+        const waterWidth = (h1 / v1Height) * v1TopWidth;
+        ctx.fillStyle = C_MASTERY;
+        ctx.globalAlpha = 0.4;
+        ctx.beginPath();
+        ctx.moveTo(V1_X, BASE_Y);
+        ctx.lineTo(V1_X - waterWidth/2, BASE_Y - h1);
+        ctx.lineTo(V1_X + waterWidth/2, BASE_Y - h1);
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+
+        // Water surface line
+        ctx.strokeStyle = C_MASTERY;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(V1_X - waterWidth/2, BASE_Y - h1);
+        ctx.lineTo(V1_X + waterWidth/2, BASE_Y - h1);
+        ctx.stroke();
+      }
+
+      // Draw △ (point up) vessel - right side
+      const v2Height = level.h2;
+      const v2BottomWidth = MAX_WIDTH;
+
+      ctx.strokeStyle = C_SIGNAL;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      // Left edge
+      ctx.moveTo(V2_X - v2BottomWidth/2, BASE_Y);
+      ctx.lineTo(V2_X, BASE_Y - v2Height);
+      // Right edge
+      ctx.lineTo(V2_X + v2BottomWidth/2, BASE_Y);
+      // Bottom edge
+      ctx.lineTo(V2_X - v2BottomWidth/2, BASE_Y);
+      ctx.stroke();
+
+      // Water in △ - width at height h is proportional to (H-h)
+      if (h2 > 0) {
+        const waterTopWidth = ((v2Height - h2) / v2Height) * v2BottomWidth;
+        ctx.fillStyle = C_MASTERY;
+        ctx.globalAlpha = 0.4;
+        ctx.beginPath();
+        ctx.moveTo(V2_X - v2BottomWidth/2, BASE_Y);
+        ctx.lineTo(V2_X - waterTopWidth/2, BASE_Y - h2);
+        ctx.lineTo(V2_X + waterTopWidth/2, BASE_Y - h2);
+        ctx.lineTo(V2_X + v2BottomWidth/2, BASE_Y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+
+        // Water surface line
+        ctx.strokeStyle = C_MASTERY;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(V2_X - waterTopWidth/2, BASE_Y - h2);
+        ctx.lineTo(V2_X + waterTopWidth/2, BASE_Y - h2);
+        ctx.stroke();
+      }
+
+      // Draw horizontal reference lines at tap moment if showing result
+      if (dr.showResult && dr.tapped) {
+        const tapLevels = getWaterLevels(dr.tapTime, level);
+        const crossLevels = getWaterLevels(dr.crossTime, level);
+
+        // Show tap position lines
+        ctx.strokeStyle = dr.winT > 0 ? C_SIGNAL : C_ALERT;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([5, 5]);
+
+        // Line at tap time for both vessels
+        ctx.beginPath();
+        ctx.moveTo(100, BASE_Y - tapLevels.h1);
+        ctx.lineTo(500, BASE_Y - tapLevels.h1);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(100, BASE_Y - tapLevels.h2);
+        ctx.lineTo(500, BASE_Y - tapLevels.h2);
+        ctx.stroke();
+
+        ctx.setLineDash([]);
+
+        // Show actual crossover line
+        ctx.strokeStyle = C_SIGNAL;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(100, BASE_Y - crossLevels.h1);
+        ctx.lineTo(500, BASE_Y - crossLevels.h1);
+        ctx.stroke();
+      }
+
+      // Show result message
+      if (dr.showResult) {
+        ctx.font = "24px monospace";
+        ctx.textAlign = "center";
+        if (dr.winT > 0) {
+          ctx.fillStyle = C_SIGNAL;
+          ctx.shadowBlur = 15;
+          ctx.shadowColor = C_SIGNAL;
+          ctx.fillText("SYNCHRONIZED", 300, 100);
+          ctx.shadowBlur = 0;
+        } else {
+          ctx.fillStyle = C_ALERT;
+          ctx.fillText(dr.tapped ? "MISSED" : "TOO SLOW", 300, 100);
+        }
+
+        ctx.font = "14px monospace";
+        ctx.fillStyle = C_DIM;
+        ctx.fillText("tap to continue", 300, 130);
+      }
+
+      // Labels
+      ctx.font = "16px monospace";
+      ctx.textAlign = "center";
+      ctx.fillStyle = C_DIM;
+      ctx.fillText("▽", V1_X, BASE_Y + 25);
+      ctx.fillText("△", V2_X, BASE_Y + 25);
+
+      // Win bar
+      if (dr.winT > 0 && dr.showResult) {
+        dr.winT++;
+        ctx.fillStyle = C_SIGNAL;
+        ctx.fillRect(0, 445, 600 * Math.min(dr.winT / 60, 1), 5);
+        if (dr.winT > 90) {
+          loadDrainRaceLevel(dr.levelIdx + 1);
+        }
+      }
+    }
+
     function draw() {
       ctx.fillStyle = C_BG;
       ctx.fillRect(0, 0, 600, 450);
@@ -1227,6 +1516,7 @@ export default function GalacticGame() {
       else if (appState.mode === MODE_SIMPLE_BALANCE) drawLever();
       else if (appState.mode === MODE_COLOR_BALANCE) drawColorBalance();
       else if (appState.mode === MODE_NESTED_BALANCE) drawNested();
+      else if (appState.mode === MODE_DRAIN_RACE) drawDrainRace();
 
       requestAnimationFrame(draw);
     }
