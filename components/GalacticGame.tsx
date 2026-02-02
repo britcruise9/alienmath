@@ -857,7 +857,7 @@ export default function GalacticGame() {
       let dots = "";
       for(let i=0; i<=idx; i++) dots += "•";
       for(let i=idx+1; i<DRAIN_RACE_LEVELS.length; i++) dots += "◦";
-      setLevelIndicator(dots + " TAP WHEN EQUAL");
+      setLevelIndicator(dots);
     }
 
     function handleDrainRaceDown() {
@@ -1435,65 +1435,6 @@ export default function GalacticGame() {
         ctx.lineTo(V2_X + waterTopWidth/2, BASE_Y - h2);
         ctx.stroke();
       }
-
-      // Draw horizontal reference lines at tap moment if showing result
-      if (dr.showResult && dr.tapped) {
-        const tapLevels = getWaterLevels(dr.tapTime, level);
-        const crossLevels = getWaterLevels(dr.crossTime, level);
-
-        // Show tap position lines
-        ctx.strokeStyle = dr.winT > 0 ? C_SIGNAL : C_ALERT;
-        ctx.lineWidth = 1;
-        ctx.setLineDash([5, 5]);
-
-        // Line at tap time for both vessels
-        ctx.beginPath();
-        ctx.moveTo(100, BASE_Y - tapLevels.h1);
-        ctx.lineTo(500, BASE_Y - tapLevels.h1);
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.moveTo(100, BASE_Y - tapLevels.h2);
-        ctx.lineTo(500, BASE_Y - tapLevels.h2);
-        ctx.stroke();
-
-        ctx.setLineDash([]);
-
-        // Show actual crossover line
-        ctx.strokeStyle = C_SIGNAL;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(100, BASE_Y - crossLevels.h1);
-        ctx.lineTo(500, BASE_Y - crossLevels.h1);
-        ctx.stroke();
-      }
-
-      // Show result message
-      if (dr.showResult) {
-        ctx.font = "24px monospace";
-        ctx.textAlign = "center";
-        if (dr.winT > 0) {
-          ctx.fillStyle = C_SIGNAL;
-          ctx.shadowBlur = 15;
-          ctx.shadowColor = C_SIGNAL;
-          ctx.fillText("SYNCHRONIZED", 300, 100);
-          ctx.shadowBlur = 0;
-        } else {
-          ctx.fillStyle = C_ALERT;
-          ctx.fillText(dr.tapped ? "MISSED" : "TOO SLOW", 300, 100);
-        }
-
-        ctx.font = "14px monospace";
-        ctx.fillStyle = C_DIM;
-        ctx.fillText("tap to continue", 300, 130);
-      }
-
-      // Labels
-      ctx.font = "16px monospace";
-      ctx.textAlign = "center";
-      ctx.fillStyle = C_DIM;
-      ctx.fillText("▽", V1_X, BASE_Y + 25);
-      ctx.fillText("△", V2_X, BASE_Y + 25);
 
       // Win bar
       if (dr.winT > 0 && dr.showResult) {
